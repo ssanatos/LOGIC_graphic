@@ -1,0 +1,3280 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>삼단논법 게시판</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/vis-network.min.css">
+
+<style>
+  :root{
+    --bg:#12181a;
+    --panel:#1b2325;
+    --panel-2:#212b2d;
+    --chalk:#f3f1e7;
+    --chalk-dim:#a9b6b4;
+    --text-dim:#a9b6b4;
+    --accent:#e8c468;
+    --accent-dim:#b98f3a;
+    --blue:#7fb3d5;
+    --pink:#e2a6c5;
+    --danger:#e08585;
+    --danger-dim:#a94d4d;
+    --ok:#8fcb9b;
+    --line: rgba(243,241,231,0.16);
+    --radius: 10px;
+  }
+
+  *{ box-sizing:border-box; }
+
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse at top left, rgba(232,196,104,0.05), transparent 45%),
+      radial-gradient(ellipse at bottom right, rgba(127,179,213,0.06), transparent 45%),
+      var(--bg);
+    color:var(--chalk);
+    font-family:'IBM Plex Sans KR', -apple-system, sans-serif;
+    min-height:100vh;
+    padding:28px 12px 64px;
+  }
+
+  .board{ max-width:820px; margin:0 auto; }
+
+  header{ margin-bottom:28px; }
+  .eyebrow{ font-family:'IBM Plex Mono', monospace; letter-spacing:0.14em; font-size:12px; color:var(--accent); margin:0 0 10px; text-transform:uppercase; }
+  h1{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:clamp(24px,5.5vw,34px); margin:0 0 8px; letter-spacing:-0.01em; }
+  .sub{ color:var(--chalk-dim); font-size:13.5px; margin:0; line-height:1.6; }
+  .hidden{ display:none !important; }
+
+  /* ---------- input groups ---------- */
+  .group{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 10px 10px; margin-bottom:14px; position:relative; }
+  .group-label{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.08em; color:var(--chalk-dim); text-transform:uppercase; margin-bottom:10px; padding:0 4px; display:flex; align-items:center; justify-content:space-between; }
+  .group-remove{ background:none; border:none; color:var(--danger); font-family:'IBM Plex Mono', monospace; font-size:11px; cursor:pointer; opacity:0.7; letter-spacing:0.05em; }
+  .group-remove:hover{ opacity:1; text-decoration:underline; }
+
+  .row{ display:flex; flex-wrap:nowrap; align-items:center; gap:3px; padding:7px 2px; border-bottom:1px dashed var(--line); }
+  .row:last-child{ border-bottom:none; }
+  .row > *{ flex-shrink:1; min-width:0; }
+
+  .badge{ flex:0 0 auto; width:18px; height:18px; border:1px solid var(--accent-dim); border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono', monospace; font-size:10px; color:var(--accent); }
+
+  select, input[type="text"]{ background:transparent; border:none; color:var(--chalk); font-family:'IBM Plex Sans KR', sans-serif; outline:none; border-radius:0; appearance:none; -webkit-appearance:none; min-width:0; }
+  input[type="text"]{ border-bottom:1px dashed var(--line); padding:5px 2px; font-size:12.5px; flex:1 1 32px; width:16px; }
+  input[type="text"]::placeholder{ color:rgba(169,182,180,0.45); }
+  input[type="text"]:focus, select:focus{ border-bottom-color:var(--accent); }
+
+  select{
+    border-bottom:1px solid var(--line);
+    background-image: linear-gradient(45deg, transparent 50%, var(--chalk-dim) 50%), linear-gradient(135deg, var(--chalk-dim) 50%, transparent 50%);
+    background-position: calc(100% - 8px) 55%, calc(100% - 4px) 55%;
+    background-size: 4px 4px, 4px 4px;
+    background-repeat:no-repeat;
+    padding:5px 14px 5px 3px;
+    font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    cursor:pointer; color:var(--chalk-dim);
+  }
+  select.quant{ flex:0 1 46px; width:46px; color:var(--blue); font-weight:500; }
+  select.particle{ flex:0 1 58px; width:58px; }
+  select.copula{ flex:0 1 52px; width:52px; color:var(--accent); font-weight:500; }
+  option{ background:var(--panel-2); color:var(--chalk); }
+
+  @media (max-width:380px){
+    .badge{ width:15px; height:15px; font-size:8.5px; }
+    select.quant{ flex-basis:38px; width:38px; font-size:10px; padding-right:11px; }
+    select.particle{ flex-basis:46px; width:46px; font-size:9px; padding-right:11px; }
+    select.copula{ flex-basis:42px; width:42px; font-size:9px; padding-right:11px; }
+    input[type="text"]{ font-size:11px; }
+    .row{ gap:2px; }
+  }
+
+  /* ---------- buttons ---------- */
+  .actions{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+  .btn{ font-family:'IBM Plex Mono', monospace; font-size:13px; letter-spacing:0.03em; padding:12px 18px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--chalk); cursor:pointer; transition: border-color .15s ease, background .15s ease, color .15s ease; flex:1 1 auto; text-align:center; text-decoration:none; }
+  .btn:hover{ border-color:var(--chalk-dim); }
+  .btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .btn-primary{ background:var(--accent); color:#1b1503; border-color:var(--accent); font-weight:600; flex:2 1 auto; }
+  .btn-primary:hover{ background:#f0cf7c; }
+  .btn-ghost{ color:var(--chalk-dim); }
+  .btn-secondary{ border-color:var(--blue); color:var(--blue); }
+  .btn-secondary:hover{ background:rgba(127,179,213,0.08); }
+  .btn-fun{ border-color:var(--pink); color:var(--pink); }
+  .btn-fun:hover{ background:rgba(226,166,197,0.08); }
+  .btn.small{ padding:8px 12px; font-size:11.5px; flex:0 0 auto; }
+
+  /* ---------- result view ---------- */
+  .result-card, .eval-card, .stats-card, .fx-card{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 12px; margin-bottom:14px; }
+  .result-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px; flex-wrap:wrap; }
+  .result-head h2, .eval-card h3, .stats-card h3, .fx-card h3{ font-family:'Space Grotesk', sans-serif; font-size:16px; margin:0 0 12px; font-weight:700; }
+  #network{
+    height:440px; width:100%;
+    background:
+      radial-gradient(ellipse at center, rgba(127,179,213,0.06), transparent 70%),
+      linear-gradient(var(--line) 1px, transparent 1px) 0 0/28px 28px,
+      linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0/28px 28px,
+      #161d1f;
+    border-radius:8px; border:1px solid var(--line);
+    overflow:hidden;
+    position:relative;
+  }
+  #network.diagram-mode{ cursor:grab; touch-action:none; }
+  #network.diagram-mode:active{ cursor:grabbing; }
+  #network canvas.diagram-canvas{ display:block; width:100%; height:100%; touch-action:none; }
+  .hint{ font-size:11.5px; color:var(--chalk-dim); margin:9px 2px 0; line-height:1.6; }
+
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--chalk-dim); margin-top:11px; font-family:'IBM Plex Mono', monospace; align-items:center; }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .legend i{ width:15px; height:0; display:inline-block; }
+  .legend i.ls-solid{ border-top:2px solid var(--chalk-dim); }
+  .legend i.ls-dashed{ border-top:2px dashed var(--chalk-dim); }
+  .legend i.ls-premise{ border-top:3px solid #7fb3d5; }
+  .legend i.ls-conclusion{ border-top:3px solid #e8c468; }
+  .legend i.ls-exception{ border-top:3px solid #ffffff; }
+  .legend i.ls-contradiction{ border-top:3px solid #111111; box-shadow:0 0 4px #ff4d6d; }
+  .legend b{ color:var(--danger); font-style:normal; }
+  .legend svg{ display:block; }
+
+  .eval-card ul{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+  .eval-card li{ font-size:13px; line-height:1.55; padding:10px 11px; border-radius:6px; border-left:3px solid var(--danger); background:rgba(224,133,133,0.08); color:var(--chalk); }
+  .eval-card li.ok{ border-left-color:var(--ok); background:rgba(143,203,155,0.08); }
+  .eval-card li.info{ border-left-color:var(--blue); background:rgba(127,179,213,0.08); }
+
+  .stats-grid{ display:flex; flex-wrap:wrap; gap:10px; }
+  .stat-chip{ flex:1 1 140px; min-width:140px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:12px 12px 10px; }
+  .stat-chip .stat-value{ font-family:'Space Grotesk', sans-serif; font-size:22px; font-weight:700; color:var(--chalk); line-height:1.1; }
+  .stat-chip .stat-value b{ font-size:13px; font-weight:500; color:var(--chalk-dim); margin-left:2px; }
+  .stat-chip .stat-label{ font-size:11.5px; color:var(--chalk-dim); margin-top:5px; line-height:1.4; }
+  .stat-chip.warn .stat-value{ color:var(--danger); }
+  .stat-chip.ok .stat-value{ color:var(--ok); }
+  .stat-chip .stat-sub{ font-size:10.5px; color:var(--chalk-dim); margin-top:3px; font-family:'IBM Plex Mono', monospace; }
+
+  .zoom-controls{ position:absolute; right:8px; bottom:8px; display:flex; flex-direction:column; gap:4px; z-index:5; }
+  .zoom-controls button{ width:28px; height:28px; border-radius:6px; border:1px solid var(--line); background:rgba(27,35,37,0.85); color:var(--chalk); font-family:'IBM Plex Mono',monospace; font-size:15px; cursor:pointer; line-height:1; }
+  .zoom-controls button:hover{ border-color:var(--chalk-dim); }
+
+  @media (max-width:520px){ #network{ height:380px; } }
+
+  /* ---------- effects panel ---------- */
+  .fx-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .fx-head h3{ margin:0 !important; }
+  .fx-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:12px 14px; margin-top:12px; }
+  .fx-field{ display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .fx-field > span{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:0.06em; color:var(--chalk-dim); display:flex; justify-content:space-between; }
+  .fx-field > span em{ font-style:normal; color:var(--accent); }
+  .fx-field select{ width:100%; font-size:12.5px; color:var(--chalk); padding:7px 18px 7px 4px; }
+  .fx-field input[type="range"]{ width:100%; accent-color:var(--accent); }
+  .fx-field input[type="color"]{ width:100%; height:30px; border:1px solid var(--line); border-radius:6px; background:transparent; padding:2px; cursor:pointer; }
+  .fx-field.disabled{ opacity:.35; pointer-events:none; }
+  .fx-field.check{ flex-direction:row; align-items:center; gap:8px; font-size:12.5px; color:var(--chalk); }
+  .fx-field.check input{ accent-color:var(--accent); width:16px; height:16px; }
+  .fx-card[data-mode="graph"] .fx-field[data-mode="diagram"],
+  .fx-card[data-mode="diagram"] .fx-field[data-mode="graph"]{ display:none; }
+
+  /* ---------- modals ---------- */
+  .modal{ position:fixed; inset:0; z-index:100; background:rgba(4,7,8,0.82); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; padding:12px; }
+  .modal-box{ width:100%; max-width:760px; max-height:94vh; overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 14px 18px; }
+  .modal-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .modal-head h3{ font-family:'Space Grotesk', sans-serif; margin:0; font-size:17px; }
+  .modal-x{ background:none; border:1px solid var(--line); color:var(--chalk-dim); border-radius:6px; width:30px; height:30px; cursor:pointer; font-size:14px; flex:0 0 auto; }
+  .modal-x:hover{ color:var(--chalk); border-color:var(--chalk-dim); }
+  .rec-stage{ margin-top:14px; background:#000; border-radius:8px; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; padding:8px; }
+  .rec-stage canvas{ display:block; max-width:100%; max-height:44vh; width:auto; height:auto; border-radius:4px; }
+  .rec-status{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--accent); margin:10px 2px 0; min-height:1.2em; line-height:1.6; }
+  #recResult{ margin-top:12px; display:flex; flex-direction:column; gap:10px; }
+  #recResult video{ width:100%; max-height:40vh; background:#000; border-radius:8px; }
+
+  .game-modal{ padding:0; background:#03060a; }
+  .game-wrap{ width:100vw; height:100vh; height:100dvh; display:flex; flex-direction:column; }
+  .game-bar{ flex:0 0 auto; display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; padding:8px 12px; border-bottom:1px solid var(--line); background:rgba(27,35,37,0.9); font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--chalk-dim); }
+  .game-bar select{ font-size:12px; color:var(--chalk); padding:5px 18px 5px 4px; max-width:150px; }
+  .game-bar .hud b{ color:var(--chalk); font-size:14px; margin-left:3px; }
+  .game-bar .hud.lives b{ color:#ff6b81; letter-spacing:2px; }
+  .game-bar .spacer{ flex:1 1 auto; }
+  .energy{ width:90px; height:8px; border-radius:4px; background:rgba(255,255,255,0.08); overflow:hidden; display:inline-block; vertical-align:middle; margin-left:4px; }
+  .energy i{ display:block; height:100%; width:100%; background:linear-gradient(90deg,#7fb3d5,#8fcb9b); transition:width .2s ease; }
+  .game-stage{ flex:1 1 auto; position:relative; overflow:hidden; }
+  .game-stage canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  .game-overlay{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:16px; pointer-events:none; }
+  .game-card{ pointer-events:auto; max-width:440px; width:100%; background:rgba(18,24,26,0.88); border:1px solid var(--line); border-radius:12px; padding:18px 16px; text-align:left; backdrop-filter:blur(4px); }
+  .game-card h2{ font-family:'Space Grotesk', sans-serif; margin:0 0 6px; font-size:22px; }
+  .game-card p, .game-card li{ font-size:13px; line-height:1.65; color:var(--chalk-dim); }
+  .game-card ul{ padding-left:18px; margin:8px 0 14px; }
+  .game-card b{ color:var(--chalk); }
+  .game-card .big{ font-family:'Space Grotesk', sans-serif; font-size:40px; color:var(--accent); margin:4px 0; }
+
+  /* ---------- ad bar (Coupang Partners) ---------- */
+  #ad-bar{ flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:4px; padding:2px 0 10px 0; position:relative; z-index:5; }
+  #ad-bar .ad-disclosure{ font-size:10px; color:var(--text-dim); letter-spacing:0.01em; text-align:center; padding:0 14px; }
+  #ad-bar .ad-slot{ min-height:50px; min-width:240px; display:flex; align-items:center; justify-content:center; }
+</style>
+</head>
+<body>
+
+<div class="board">
+
+  <header>
+    <p class="eyebrow">Syllogism Board · 三段論法</p>
+    <h1>삼단논법 게시판</h1>
+    <p class="sub">문장을 입력하면 그래프와 원·부채꼴 다이어그램으로 그려주고, 9가지 표준 삼단논법 형식에 맞는지 판정합니다.</p>
+  </header>
+
+  <!-- ============ INPUT VIEW ============ -->
+  <main id="inputView">
+    <div id="groups"></div>
+    <div class="actions">
+      <button id="addBtn" class="btn btn-ghost">+ 추가</button>
+      <button id="doneBtn" class="btn btn-primary">완료</button>
+    </div>
+    <div class="actions">
+      <button id="saveFileBtn" class="btn btn-ghost small">파일로 저장</button>
+      <button id="loadFileBtn" class="btn btn-ghost small">파일 불러오기</button>
+      <input type="file" id="loadFileInput" accept="application/json,.json" style="display:none;">
+    </div>
+  </main>
+
+  <!-- ============ RESULT VIEW ============ -->
+  <main id="resultView" class="hidden">
+
+    <div class="result-card">
+      <div class="result-head">
+        <h2 id="viewTitle">논리 그래프</h2>
+        <button id="saveImgBtn" class="btn btn-ghost small">이미지로 저장</button>
+      </div>
+      <div id="network"></div>
+      <p class="hint" id="dragHint"></p>
+      <div class="legend" id="legendBox"></div>
+    </div>
+
+    <div class="fx-card" id="fxCard" data-mode="graph">
+      <div class="fx-head">
+        <h3>그래픽 효과</h3>
+        <button id="fxRandom" class="btn btn-ghost small">🎲 랜덤 조합</button>
+      </div>
+      <div class="fx-grid">
+        <label class="fx-field" data-mode="graph"><span>화살표 효과</span><select id="fxGraphEdge"></select></label>
+        <label class="fx-field" data-mode="graph"><span>노드 효과</span><select id="fxGraphNode"></select></label>
+        <label class="fx-field" data-mode="diagram"><span>도형 효과</span><select id="fxDiagram"></select></label>
+        <label class="fx-field" data-mode="diagram"><span>겹칠 효과 (레이어)</span><select id="fxDiagram2"></select></label>
+        <label class="fx-field" data-mode="diagram"><span>라인 스타일</span><select id="fxLineStyle"></select></label>
+        <label class="fx-field" data-mode="diagram"><span>순차 방향</span>
+          <select id="fxPulseDir"><option value="in2out">안 → 밖</option><option value="out2in">밖 → 안</option></select></label>
+        <label class="fx-field"><span>빛 색상</span>
+          <select id="fxColorMode"><option value="role">기본 (의미색)</option><option value="single">단일색</option><option value="rainbow">무지개</option></select></label>
+        <label class="fx-field" id="fxColorField"><span>단일색 고르기</span><input type="color" id="fxColor"></label>
+        <label class="fx-field"><span>속도 · 빈도 <em id="fxSpeedVal"></em></span><input type="range" id="fxSpeed" min="0.2" max="3" step="0.1"></label>
+        <label class="fx-field"><span>밝기 · 글로우 <em id="fxIntensityVal"></em></span><input type="range" id="fxIntensity" min="0.2" max="2" step="0.1"></label>
+        <label class="fx-field"><span>LED 밀도 <em id="fxDensityVal"></em></span><input type="range" id="fxDensity" min="1" max="10" step="1"></label>
+      </div>
+    </div>
+
+    <div class="stats-card" id="statsCard">
+      <h3>그래프 통계</h3>
+      <div class="stats-grid" id="statsGrid"></div>
+    </div>
+
+    <div class="eval-card">
+      <h3>논리성 평가</h3>
+      <ul id="evalList"></ul>
+    </div>
+
+    <div class="actions">
+      <button id="toggleBtn" class="btn btn-secondary">다이어그램으로 보기</button>
+      <button id="recBtn" class="btn btn-fun">🎬 낭독 영상 만들기</button>
+      <button id="gameBtn" class="btn btn-fun">🎮 집합 캐처 게임</button>
+      <button id="backBtn" class="btn btn-ghost">다시 입력하기</button>
+    </div>
+  </main>
+
+</div>
+
+<!-- ============ RECORDING MODAL ============ -->
+<div class="modal hidden" id="recModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>🎬 명제 낭독 영상 만들기</h3>
+      <button class="modal-x" data-close="rec">✕</button>
+    </div>
+    <div class="fx-grid">
+      <label class="fx-field"><span>세트</span><select id="recSet"></select></label>
+      <label class="fx-field"><span>화면 비율</span>
+        <select id="recRatio"><option value="9:16">세로 9:16 (쇼츠)</option><option value="16:9">가로 16:9</option><option value="1:1">정사각 1:1</option></select></label>
+      <label class="fx-field"><span>음성</span><select id="recVoice"></select></label>
+      <label class="fx-field"><span>말하기 속도 <em id="recRateVal"></em></span><input type="range" id="recRate" min="0.6" max="1.6" step="0.05" value="1"></label>
+      <label class="fx-field"><span>소리 넣기</span>
+        <select id="recAudio"><option value="capture">TTS 음성 포함 (오디오 캡처)</option><option value="silent">무음 (자막만, 고정 타이밍)</option></select></label>
+      <label class="fx-field check"><input type="checkbox" id="recTherefore" checked> 결론 앞에 "그러므로" 읽기</label>
+    </div>
+    <p class="hint" id="recGuide">
+      도형 효과·색·속도는 위 <b>그래픽 효과</b> 설정을 그대로 씁니다.<br>
+      음성 포함 녹화를 시작하면 화면 공유 창이 뜹니다 — <b>‘이 탭’</b>을 고르고 <b>‘탭 오디오 공유’</b>를 켜 주세요.
+      음성 종류에 따라 TTS가 탭 오디오에 잡히지 않으면, Windows Chrome에서는 <b>‘전체 화면’ + ‘시스템 오디오 공유’</b>를 고르면 됩니다.
+      녹화 중에는 이 탭을 계속 띄워 두세요.
+    </p>
+    <div class="rec-stage"><canvas id="recCanvas" width="720" height="1280"></canvas></div>
+    <p class="rec-status" id="recStatus"></p>
+    <div class="actions">
+      <button id="recPreviewBtn" class="btn btn-ghost">▶ 미리보기 (녹화 없이)</button>
+      <button id="recStartBtn" class="btn btn-primary">● 녹화 시작</button>
+      <button id="recStopBtn" class="btn btn-ghost" disabled>■ 중지</button>
+    </div>
+    <div id="recResult" class="hidden">
+      <video id="recVideo" controls playsinline></video>
+      <a id="recDownload" class="btn btn-primary" download>⬇ 영상 다운로드</a>
+    </div>
+  </div>
+</div>
+
+<!-- ============ GAME MODAL ============ -->
+<div class="modal game-modal hidden" id="gameModal">
+  <div class="game-wrap">
+    <div class="game-bar">
+      <select id="gameSet"></select>
+      <span class="hud">점수<b id="hudScore">0</b></span>
+      <span class="hud">콤보<b id="hudCombo">0</b></span>
+      <span class="hud">레벨<b id="hudLevel">1</b></span>
+      <span class="hud lives">생명<b id="hudLives">♥♥♥</b></span>
+      <span class="hud">에너지<span class="energy"><i id="hudEnergy"></i></span></span>
+      <span class="hud">최고<b id="hudBest">0</b></span>
+      <span class="spacer"></span>
+      <button class="modal-x" data-close="game">✕</button>
+    </div>
+    <div class="game-stage" id="gameStage">
+      <canvas id="gameCanvas"></canvas>
+      <div class="game-overlay" id="gameOverlay"></div>
+    </div>
+  </div>
+</div>
+
+<div id="result"></div>
+  <div class="ad-disclosure" style="margin-top:2px; text-align: center;">이 링크는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</div>
+  <div id="ad-bar">
+    <div class="ad-slot">
+      <script src="https://ads-partners.coupang.com/g.js"></script>
+      <script>
+          new PartnersCoupang.G({"id":1000572,"trackingCode":"AF0795367","subId":null,"template":"carousel","width":"280","height":"50"});
+      </script>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var TAU = Math.PI * 2;
+
+  // =================================================================
+  // INPUT (unchanged behaviour)
+  // =================================================================
+  var groupsEl = document.getElementById('groups');
+  var groupCount = 0;
+
+  var PARTICLE_OPTS = ['은','는','이 아닌 것은','가 아닌 것은'];
+  var COPULA_OPTS   = ['이다','다','가 아니다','이 아니다'];
+
+  function optionsHTML(list){
+    return list.map(function(v){ return '<option value="'+v+'">'+v+'</option>'; }).join('');
+  }
+
+  function rowHTML(){
+    return (
+      '<div class="row">' +
+        '<span class="badge js-badge-l"></span>' +
+        '<select class="quant"><option value="모든">모든</option><option value="어떤">어떤</option></select>' +
+        '<input type="text" class="wordLeft" placeholder="단어">' +
+        '<select class="particle">' + optionsHTML(PARTICLE_OPTS) + '</select>' +
+        '<input type="text" class="wordRight" placeholder="단어">' +
+        '<span class="badge js-badge-r"></span>' +
+        '<select class="copula">' + optionsHTML(COPULA_OPTS) + '</select>' +
+      '</div>'
+    );
+  }
+
+  function addGroup(){
+    groupCount++;
+    var g = document.createElement('div');
+    g.className = 'group';
+    g.dataset.groupId = groupCount;
+    var removeBtn = groupCount > 1 ? '<button type="button" class="group-remove" onclick="this.closest(\'.group\').remove(); window.__renumber();">삭제</button>' : '';
+    g.innerHTML =
+      '<div class="group-label"><span>세트 ' + groupCount + '</span>' + removeBtn + '</div>' +
+      rowHTML() + rowHTML() + rowHTML();
+    groupsEl.appendChild(g);
+    renumberBadges();
+  }
+
+  function renumberBadges(){
+    var rows = groupsEl.querySelectorAll('.row');
+    var n = 1;
+    rows.forEach(function(row){
+      row.querySelector('.js-badge-l').textContent = n++;
+      row.querySelector('.js-badge-r').textContent = n++;
+    });
+  }
+  window.__renumber = renumberBadges;
+
+  document.getElementById('addBtn').addEventListener('click', addGroup);
+  addGroup();
+
+  function exportGroupsForFile(){
+    var groups = [];
+    groupsEl.querySelectorAll('.group').forEach(function(gEl){
+      var rows = [];
+      gEl.querySelectorAll('.row').forEach(function(row){
+        rows.push({
+          quant: row.querySelector('.quant').value,
+          wordLeft: row.querySelector('.wordLeft').value,
+          particle: row.querySelector('.particle').value,
+          wordRight: row.querySelector('.wordRight').value,
+          copula: row.querySelector('.copula').value
+        });
+      });
+      groups.push(rows);
+    });
+    return groups;
+  }
+
+  function importGroupsFromFile(groups){
+    if(!Array.isArray(groups) || groups.length === 0){
+      alert('올바른 형식의 파일이 아닙니다.');
+      return;
+    }
+    groupsEl.innerHTML = '';
+    groupCount = 0;
+    groups.forEach(function(rows){
+      groupCount++;
+      var g = document.createElement('div');
+      g.className = 'group';
+      g.dataset.groupId = groupCount;
+      var removeBtn = groupCount > 1 ? '<button type="button" class="group-remove" onclick="this.closest(\'.group\').remove(); window.__renumber();">삭제</button>' : '';
+      g.innerHTML = '<div class="group-label"><span>세트 ' + groupCount + '</span>' + removeBtn + '</div>' + rowHTML() + rowHTML() + rowHTML();
+      groupsEl.appendChild(g);
+      g.querySelectorAll('.row').forEach(function(rowEl, idx){
+        var r = (rows && rows[idx]) || {};
+        if(r.quant) rowEl.querySelector('.quant').value = r.quant;
+        if(r.wordLeft !== undefined) rowEl.querySelector('.wordLeft').value = r.wordLeft;
+        if(r.particle) rowEl.querySelector('.particle').value = r.particle;
+        if(r.wordRight !== undefined) rowEl.querySelector('.wordRight').value = r.wordRight;
+        if(r.copula) rowEl.querySelector('.copula').value = r.copula;
+      });
+    });
+    renumberBadges();
+  }
+
+  document.getElementById('saveFileBtn').addEventListener('click', function(){
+    var payload = { type:'삼단논법-게시판', version:1, savedAt:new Date().toISOString(), groups: exportGroupsForFile() };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+    var url = URL.createObjectURL(blob);
+    triggerDownload(url, '삼단논법_입력.json');
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  });
+
+  document.getElementById('loadFileBtn').addEventListener('click', function(){
+    document.getElementById('loadFileInput').click();
+  });
+  document.getElementById('loadFileInput').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(evt){
+      try{
+        var data = JSON.parse(evt.target.result);
+        importGroupsFromFile(Array.isArray(data) ? data : data.groups);
+      }catch(err){
+        alert('파일을 읽을 수 없습니다: ' + err.message);
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  });
+
+  // ---------------------------------------------------------------
+  // Raw statement extraction
+  // ---------------------------------------------------------------
+  function rowToRaw(row){
+    var quant = row.querySelector('.quant').value;
+    var subj = row.querySelector('.wordLeft').value.trim();
+    var particle = row.querySelector('.particle').value;
+    var pred = row.querySelector('.wordRight').value.trim();
+    var copula = row.querySelector('.copula').value;
+    var subjNeg = (particle === '이 아닌 것은' || particle === '가 아닌 것은');
+    var predNeg = (copula === '가 아니다' || copula === '이 아니다');
+    return { quant:quant, subj:subj, subjNeg:subjNeg, pred:pred, predNeg:predNeg, particle:particle, copula:copula };
+  }
+
+  function collectFlatRaw(){
+    var list = [];
+    groupsEl.querySelectorAll('.row').forEach(function(row){
+      var r = rowToRaw(row);
+      if(r.subj && r.pred) list.push(r);
+    });
+    return list;
+  }
+
+  function collectGroupedRaw(){
+    var groups = [];
+    groupsEl.querySelectorAll('.group').forEach(function(gEl, idx){
+      var rows = [];
+      gEl.querySelectorAll('.row').forEach(function(row){ rows.push(rowToRaw(row)); });
+      var complete = rows.length === 3 && rows.every(function(r){ return r.subj && r.pred; });
+      groups.push({ index: idx+1, rows: rows, complete: complete });
+    });
+    return groups;
+  }
+
+  function labelOf(word, neg){ return word + (neg ? '×' : ''); }
+
+  function computeGroupEdges(group){
+    var rewriteRowIndex = -1;
+    if(group.rows.length === 3 && group.rows.every(function(r){ return r.subj && r.pred; })){
+      var m = matchGroup(group.rows);
+      if(m && m.template.id === 8 && typeof m.p1RowIndex === 'number'){
+        var p1Raw = group.rows[m.p1RowIndex];
+        if(!p1Raw.subjNeg){ rewriteRowIndex = m.p1RowIndex; }
+      }
+    }
+    var result = [];
+    group.rows.forEach(function(r, idx){
+      if(!r.subj || !r.pred) return;
+      var fromLabel, toLabel, solid;
+      if(idx === rewriteRowIndex){
+        fromLabel = labelOf(r.pred, true);
+        toLabel = labelOf(r.subj, true);
+        solid = true;
+      } else {
+        fromLabel = labelOf(r.subj, r.subjNeg);
+        toLabel = labelOf(r.pred, r.predNeg);
+        solid = (r.quant === '모든');
+      }
+      result.push({ rowIndex:idx, fromLabel:fromLabel, toLabel:toLabel, solid:solid,
+        role: (idx === 2 ? 'conclusion' : 'premise') });
+    });
+    return result;
+  }
+
+  // =================================================================
+  // COLOUR / MATH HELPERS
+  // =================================================================
+  var _rgbCache = {};
+  function hexToRgb(h){
+    if(_rgbCache[h]) return _rgbCache[h];
+    var s = String(h).replace('#','');
+    if(s.length === 3) s = s.replace(/./g, '$&$&');
+    var n = parseInt(s, 16) || 0;
+    var out = [(n>>16)&255, (n>>8)&255, n&255];
+    _rgbCache[h] = out;
+    return out;
+  }
+  function rgbToHex(r,g,b){
+    return '#' + [r,g,b].map(function(v){ v = Math.max(0, Math.min(255, Math.round(v))); return (v < 16 ? '0' : '') + v.toString(16); }).join('');
+  }
+  function mixHex(a, b, t){
+    var A = hexToRgb(a), B = hexToRgb(b);
+    return rgbToHex(A[0]+(B[0]-A[0])*t, A[1]+(B[1]-A[1])*t, A[2]+(B[2]-A[2])*t);
+  }
+  function rgba(hex, a){
+    var c = hexToRgb(hex);
+    a = Math.max(0, Math.min(1, a));
+    return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a.toFixed(3) + ')';
+  }
+  function hslHex(h, s, l){
+    h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+    var a = s * Math.min(l, 1-l);
+    function f(n){ var k = (n + h/30) % 12; return l - a * Math.max(-1, Math.min(k-3, Math.min(9-k, 1))); }
+    return rgbToHex(255*f(0), 255*f(8), 255*f(4));
+  }
+  function fract(x){ return x - Math.floor(x); }
+  function hash(n){ var s = Math.sin(n*127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+  var _measureCtx = document.createElement('canvas').getContext('2d');
+  function measureText(str, px, weight, family){
+    _measureCtx.font = (weight || 600) + ' ' + px + 'px ' + (family || '"IBM Plex Sans KR", sans-serif');
+    return _measureCtx.measureText(str).width;
+  }
+
+  function glowDot(ctx, x, y, r, col, a, blur){
+    if(a <= 0.003 || r <= 0) return;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU);
+    ctx.fillStyle = rgba(col, a);
+    ctx.shadowColor = rgba(col, Math.min(1, a));
+    ctx.shadowBlur = blur || 0;
+    ctx.fill();
+  }
+  function drawStar(ctx, x, y, s, col, a, blur){
+    if(a <= 0.01) return;
+    ctx.save();
+    ctx.shadowColor = rgba(col, a); ctx.shadowBlur = blur;
+    ctx.strokeStyle = rgba(mixHex(col, '#ffffff', .6), a);
+    ctx.lineWidth = Math.max(0.8, s*0.18);
+    ctx.beginPath();
+    ctx.moveTo(x - s, y); ctx.lineTo(x + s, y);
+    ctx.moveTo(x, y - s); ctx.lineTo(x, y + s);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, s*0.28, 0, TAU);
+    ctx.fillStyle = rgba('#ffffff', a); ctx.fill();
+    ctx.restore();
+  }
+
+  // Soft, glossy 3D sphere (used for graph nodes and game orbs)
+  function drawSphere(ctx, x, y, r, hex, o){
+    o = o || {};
+    ctx.save();
+    if(o.alpha != null) ctx.globalAlpha *= o.alpha;
+    // outer glow + body
+    if(o.glow > 0){
+      ctx.shadowColor = rgba(o.glowColor || hex, Math.min(1, .3 + .55*o.glow));
+      ctx.shadowBlur = (o.blur || 20) * Math.min(2.2, o.glow);
+    }
+    var g = ctx.createRadialGradient(x - r*.35, y - r*.42, r*.06, x, y, r*1.02);
+    g.addColorStop(0, mixHex(hex, '#ffffff', .6));
+    g.addColorStop(.45, hex);
+    g.addColorStop(1, mixHex(hex, '#000000', .58));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    ctx.shadowBlur = 0;
+    // reflected rim light from below + specular highlight
+    ctx.save();
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.clip();
+    var rg = ctx.createRadialGradient(x, y + r*1.15, r*.15, x, y + r*.95, r*1.05);
+    rg.addColorStop(0, rgba(mixHex(o.glowColor || hex, '#ffffff', .35), .45));
+    rg.addColorStop(1, rgba(hex, 0));
+    ctx.fillStyle = rg; ctx.fillRect(x - r, y - r, r*2, r*2);
+    var sx = x - r*.3, sy = y - r*.46;
+    var sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, r*.62);
+    sg.addColorStop(0, 'rgba(255,255,255,0.78)');
+    sg.addColorStop(.5, 'rgba(255,255,255,0.18)');
+    sg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.ellipse(sx, sy, r*.6, r*.36, -0.45, 0, TAU); ctx.fill();
+    ctx.restore();
+    // crisp edge
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = rgba(mixHex(hex, '#000000', .6), .6);
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+    if(o.selected){
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.arc(x, y, r + 4, 0, TAU); ctx.stroke();
+    }
+    if(o.text){
+      var fp = o.fontPx || 15;
+      ctx.font = '700 ' + fp + 'px "IBM Plex Sans KR", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillText(o.text, x, y + 1.2);
+      ctx.fillStyle = o.textColor || '#14181a';
+      ctx.fillText(o.text, x, y);
+    }
+    ctx.restore();
+  }
+
+  // =================================================================
+  // EFFECT SETTINGS
+  // =================================================================
+  var GRAPH_EDGE_FX = [
+    ['flow','LED 흐름 (빛 알갱이)'],['comet','혜성 꼬리'],['pulse','펄스 띠'],
+    ['dash','네온 점선 행진'],['spark','전기 스파크'],['blink','점멸'],['none','효과 없음']
+  ];
+  var GRAPH_NODE_FX = [
+    ['breathe','숨쉬기 글로우'],['orbit','궤도 LED'],['twinkle','반짝이 별'],['gloss','정적 광택'],['none','글로우 없음']
+  ];
+  // [value, label, group]
+  var DIAGRAM_FX = [
+    ['relay','릴레이 궤도 (한 바퀴씩 이어 돌기)','빛 알갱이'],
+    ['orbits','행성 궤도 (안쪽일수록 빠르게)','빛 알갱이'],
+    ['chase','외곽 흐르는 빛','빛 알갱이'],
+    ['marquee','LED 전구 띠','빛 알갱이'],
+    ['firefly','반딧불','빛 알갱이'],
+    ['sparkle','반짝이 별','빛 알갱이'],
+    ['pulse','맥박 (순차 심장박동)','빛 리듬'],
+    ['wave','순차 점등','빛 리듬'],
+    ['breathe','숨쉬기','빛 리듬'],
+    ['neon','네온사인 (지직임)','빛 리듬'],
+    ['blink','깜빡임','빛 리듬'],
+    ['alternate','교대 깜빡임','빛 리듬'],
+    ['static','고정 발광','빛 리듬'],
+    ['liquid','물 차오름 (순차)','면 · 공간'],
+    ['aurora','오로라 물결','면 · 공간'],
+    ['dotmatrix','LED 도트 매트릭스','면 · 공간'],
+    ['ripple','파문','면 · 공간'],
+    ['spotlight','등대 빔','면 · 공간'],
+    ['scan','스캔 라인','면 · 공간'],
+    ['trace','펜 드로잉 (순차로 그리기)','드로잉 · 전기'],
+    ['lightning','전기 아크 (도형 사이)','드로잉 · 전기']
+  ];
+  var LINE_STYLES = [
+    ['metal','메탈릭 광택 (흐르는 하이라이트)'],['double','이중 라인 (금박 테)'],['gradient','톤 그라데이션 회전'],
+    ['filigree','진주 비즈 테두리'],['glass','유리 테두리 (반짝 글린트)'],['classic','기본 단색']
+  ];
+
+  var FX = { graphEdge:'flow', graphNode:'breathe', diagram:'relay', diagram2:'none', lineStyle:'metal', pulseDir:'in2out',
+    colorMode:'role', color:'#5ef0ff', speed:1, intensity:1, density:4 };
+  try{
+    var savedFx = JSON.parse(localStorage.getItem('syllo_fx') || 'null');
+    if(savedFx && typeof savedFx === 'object') Object.keys(FX).forEach(function(k){ if(savedFx[k] !== undefined) FX[k] = savedFx[k]; });
+  }catch(e){}
+  function saveFX(){ try{ localStorage.setItem('syllo_fx', JSON.stringify(FX)); }catch(e){} }
+
+  function fillSelect(el, list, val, extraFirst){
+    var html = extraFirst ? '<option value="'+extraFirst[0]+'">'+extraFirst[1]+'</option>' : '';
+    var group = null;
+    list.forEach(function(p){
+      if(p[2] && p[2] !== group){
+        if(group !== null) html += '</optgroup>';
+        group = p[2]; html += '<optgroup label="'+group+'">';
+      }
+      html += '<option value="'+p[0]+'">'+p[1]+'</option>';
+    });
+    if(group !== null) html += '</optgroup>';
+    el.innerHTML = html;
+    el.value = val;
+  }
+  var fxEls = {
+    graphEdge: document.getElementById('fxGraphEdge'),
+    graphNode: document.getElementById('fxGraphNode'),
+    diagram: document.getElementById('fxDiagram'),
+    diagram2: document.getElementById('fxDiagram2'),
+    lineStyle: document.getElementById('fxLineStyle'),
+    pulseDir: document.getElementById('fxPulseDir'),
+    colorMode: document.getElementById('fxColorMode'),
+    color: document.getElementById('fxColor'),
+    speed: document.getElementById('fxSpeed'),
+    intensity: document.getElementById('fxIntensity'),
+    density: document.getElementById('fxDensity')
+  };
+  fillSelect(fxEls.graphEdge, GRAPH_EDGE_FX, FX.graphEdge);
+  fillSelect(fxEls.graphNode, GRAPH_NODE_FX, FX.graphNode);
+  if(!DIAGRAM_FX.some(function(p){ return p[0] === FX.diagram; })) FX.diagram = 'relay';
+  fillSelect(fxEls.diagram, DIAGRAM_FX, FX.diagram);
+  fillSelect(fxEls.diagram2, DIAGRAM_FX, FX.diagram2, ['none','없음']);
+  fillSelect(fxEls.lineStyle, LINE_STYLES, FX.lineStyle);
+
+  function syncFxPanel(){
+    Object.keys(fxEls).forEach(function(k){ fxEls[k].value = FX[k]; });
+    document.getElementById('fxSpeedVal').textContent = Number(FX.speed).toFixed(1) + '×';
+    document.getElementById('fxIntensityVal').textContent = Number(FX.intensity).toFixed(1) + '×';
+    document.getElementById('fxDensityVal').textContent = FX.density;
+    document.getElementById('fxColorField').classList.toggle('disabled', FX.colorMode !== 'single');
+  }
+  Object.keys(fxEls).forEach(function(k){
+    fxEls[k].addEventListener('input', function(){
+      var v = fxEls[k].value;
+      FX[k] = (k === 'speed' || k === 'intensity' || k === 'density') ? parseFloat(v) : v;
+      syncFxPanel(); saveFX();
+    });
+  });
+  document.getElementById('fxRandom').addEventListener('click', function(){
+    function pick(list){ return list[Math.floor(Math.random()*list.length)][0]; }
+    FX.graphEdge = pick(GRAPH_EDGE_FX.slice(0, -1));
+    FX.graphNode = pick(GRAPH_NODE_FX.slice(0, -1));
+    FX.diagram = pick(DIAGRAM_FX);
+    FX.diagram2 = Math.random() < .5 ? 'none' : pick(DIAGRAM_FX);
+    FX.lineStyle = pick(LINE_STYLES.slice(0, -1));
+    FX.pulseDir = Math.random() < .5 ? 'in2out' : 'out2in';
+    FX.colorMode = pick([['role'],['single'],['rainbow']]);
+    FX.color = hslHex(Math.random()*360, 95, 62);
+    FX.speed = Math.round((0.6 + Math.random()*1.4) * 10) / 10;
+    FX.density = 2 + Math.floor(Math.random()*7);
+    syncFxPanel(); saveFX();
+  });
+  syncFxPanel();
+
+  // =================================================================
+  // GRAPH data
+  // =================================================================
+  var PREMISE_COLOR = '#7fb3d5';
+  var CONCLUSION_COLOR = '#e8c468';
+  var NO_ROLE_COLOR = '#ffffff';
+  var CONTRADICTION_COLOR = '#111111';
+  var CONTRADICTION_LIGHT = '#ff4d6d';
+  var NODE_FONT_PX = 15;
+  var NEG_NODE_R = 15;
+
+  function buildGraphAndTriples(groupedRaw){
+    var rawByGroup = [];
+    groupedRaw.forEach(function(group){
+      var ge = computeGroupEdges(group);
+      var middleLabel = null;
+      if(ge.length === 3){
+        var s1 = [ge[0].fromLabel, ge[0].toLabel], s2 = [ge[1].fromLabel, ge[1].toLabel];
+        s1.forEach(function(l){ if(s2.indexOf(l) !== -1) middleLabel = l; });
+      }
+      rawByGroup.push({ edges:ge, hasTriangle: !!middleLabel, middleLabel:middleLabel });
+    });
+
+    var mergedMap = new Map();
+    rawByGroup.forEach(function(gInfo){
+      gInfo.edges.forEach(function(e){
+        var key = e.fromLabel + '\u0001' + e.toLabel;
+        if(!mergedMap.has(key)) mergedMap.set(key, { fromLabel:e.fromLabel, toLabel:e.toLabel, solid:false, occurrences:[] });
+        var m = mergedMap.get(key);
+        if(e.solid) m.solid = true;
+        m.occurrences.push({ role:e.role, hasTriangle:gInfo.hasTriangle });
+      });
+    });
+
+    var mergedEdges = [];
+    var edgeKeyToId = {};
+    var ec = 0;
+    mergedMap.forEach(function(m, key){
+      var id = 'e' + (ec++);
+      var statsRole = m.occurrences.some(function(o){ return o.role === 'conclusion'; }) ? 'conclusion' : 'premise';
+      var triangleOccs = m.occurrences.filter(function(o){ return o.hasTriangle; });
+      var colorRole = 'ambiguous';
+      if(triangleOccs.length > 0){
+        var roles = {};
+        triangleOccs.forEach(function(o){ roles[o.role] = true; });
+        var roleKeys = Object.keys(roles);
+        if(roleKeys.length === 1) colorRole = roleKeys[0];
+      }
+      mergedEdges.push({ id:id, fromLabel:m.fromLabel, toLabel:m.toLabel, solid:m.solid, statsRole:statsRole, colorRole:colorRole });
+      edgeKeyToId[key] = id;
+    });
+
+    var bySource = {};
+    mergedEdges.forEach(function(e){
+      if(!e.solid) return;
+      (bySource[e.fromLabel] = bySource[e.fromLabel] || []).push(e);
+    });
+    var contradictionIds = {};
+    Object.keys(bySource).forEach(function(src){
+      var list = bySource[src];
+      list.forEach(function(e1){
+        list.forEach(function(e2){
+          if(e1 === e2) return;
+          var base1 = e1.toLabel.replace('×',''), neg1 = e1.toLabel.indexOf('×') !== -1;
+          var base2 = e2.toLabel.replace('×',''), neg2 = e2.toLabel.indexOf('×') !== -1;
+          if(base1 === base2 && neg1 !== neg2){ contradictionIds[e1.id] = true; contradictionIds[e2.id] = true; }
+        });
+      });
+    });
+
+    // ---- nodes: invisible vis "dot" hit areas; the glossy sphere is drawn by us.
+    // A negated term whose plain term also exists is shown as a small "×"
+    // sphere stuck to the right side of the plain one.
+    var nodeMap = new Map(), nodes = [], nodeInfo = {};
+    function ensureNode(label){
+      if(!nodeMap.has(label)){
+        var id = nodeMap.size + 1;
+        nodeMap.set(label, id);
+        nodes.push({ id:id, _label:label });
+      }
+      return nodeMap.get(label);
+    }
+    mergedEdges.forEach(function(e){ ensureNode(e.fromLabel); ensureNode(e.toLabel); });
+
+    var labelSet = {};
+    nodes.forEach(function(n){ labelSet[n._label] = n.id; });
+    var pairs = [];
+    var TRANSPARENT = 'rgba(0,0,0,0)';
+    nodes.forEach(function(n){
+      var neg = n._label.indexOf('×') !== -1;
+      var baseLabel = n._label.replace('×','');
+      var baseId = neg ? labelSet[baseLabel] : null;
+      var paired = neg && baseId !== undefined && baseId !== null;
+      var text = paired ? '×' : n._label;
+      var r = paired ? NEG_NODE_R : Math.max(24, measureText(text, NODE_FONT_PX, 700)/2 + 14);
+      nodeInfo[n.id] = { label:n._label, text:text, neg:neg, paired:paired, r:r };
+      n.shape = 'dot';
+      n.size = r;
+      n.borderWidth = 0;
+      n.borderWidthSelected = 0;
+      n.chosen = false;
+      n.font = { size:0 };
+      n.color = { background:TRANSPARENT, border:TRANSPARENT,
+        highlight:{ background:TRANSPARENT, border:TRANSPARENT }, hover:{ background:TRANSPARENT, border:TRANSPARENT } };
+      if(paired){
+        n.physics = false;
+        pairs.push({ baseId:baseId, negId:n.id, dragNeg:false });
+      }
+    });
+
+    var visEdges = mergedEdges.map(function(e){
+      var color, contra = !!contradictionIds[e.id];
+      if(contra) color = CONTRADICTION_COLOR;
+      else if(e.colorRole === 'conclusion') color = CONCLUSION_COLOR;
+      else if(e.colorRole === 'premise') color = PREMISE_COLOR;
+      else color = NO_ROLE_COLOR;
+      return { id:e.id, from:nodeMap.get(e.fromLabel), to:nodeMap.get(e.toLabel),
+        dashes: !e.solid, arrows:'to',
+        color:{ color:color, highlight:color, hover:color, opacity: contra ? 1 : .6 },
+        width: contra ? 3 : 2,
+        smooth:{ type:'continuous' },
+        _base: color, _contra: contra };
+    });
+
+    var triples = [];
+    rawByGroup.forEach(function(gInfo){
+      if(!gInfo.hasTriangle || gInfo.edges.length !== 3) return;
+      var ids = gInfo.edges.map(function(e){ return edgeKeyToId[e.fromLabel + '\u0001' + e.toLabel]; });
+      if(ids.some(function(x){ return !x; })) return;
+      triples.push({ middleNodeId: nodeMap.get(gInfo.middleLabel),
+        premiseEdgeIds:[ids[0], ids[1]], conclusionEdgeId:ids[2], midHidden:false, conclHidden:false });
+    });
+
+    return { nodes:nodes, edges:visEdges, triples:triples, pairs:pairs, mergedEdges:mergedEdges, nodeInfo:nodeInfo };
+  }
+
+  // ---------------------------------------------------------------
+  // Whole-graph statistics (unchanged)
+  // ---------------------------------------------------------------
+  function countComponents(nodes, edges){
+    var adj = {};
+    nodes.forEach(function(n){ adj[n.id] = []; });
+    edges.forEach(function(e){ adj[e.from].push(e.to); adj[e.to].push(e.from); });
+    var seen = {}, count = 0;
+    nodes.forEach(function(n){
+      if(seen[n.id]) return;
+      count++;
+      var queue = [n.id]; seen[n.id] = true;
+      while(queue.length){
+        var cur = queue.shift();
+        adj[cur].forEach(function(nb){ if(!seen[nb]){ seen[nb] = true; queue.push(nb); } });
+      }
+    });
+    return count;
+  }
+
+  function countWeakBridges(nodes, edges){
+    var adj = {};
+    nodes.forEach(function(n){ adj[n.id] = []; });
+    edges.forEach(function(e){
+      adj[e.from].push({ to:e.to, eid:e.id });
+      adj[e.to].push({ to:e.from, eid:e.id });
+    });
+    var visited = {}, disc = {}, low = {}, subtreeSize = {};
+    var timer = 0;
+    var candidates = [];
+    function dfs(u, parentEdgeId, root){
+      visited[u] = true;
+      disc[u] = low[u] = timer++;
+      subtreeSize[u] = 1;
+      adj[u].forEach(function(edge){
+        if(edge.eid === parentEdgeId) return;
+        if(!visited[edge.to]){
+          dfs(edge.to, edge.eid, root);
+          subtreeSize[u] += subtreeSize[edge.to];
+          low[u] = Math.min(low[u], low[edge.to]);
+          if(low[edge.to] > disc[u]) candidates.push({ eid:edge.eid, smallerSide:subtreeSize[edge.to], root:root });
+        } else {
+          low[u] = Math.min(low[u], disc[edge.to]);
+        }
+      });
+    }
+    nodes.forEach(function(n){ if(!visited[n.id]) dfs(n.id, null, n.id); });
+    var weak = 0;
+    candidates.forEach(function(c){
+      var otherSide = subtreeSize[c.root] - c.smallerSide;
+      if(c.smallerSide >= 2 && otherSide >= 2) weak++;
+    });
+    return weak;
+  }
+
+  function countPremiseConclusion(mergedEdges){
+    var premise = 0, conclusion = 0;
+    mergedEdges.forEach(function(e){ if(e.statsRole === 'conclusion') conclusion++; else premise++; });
+    return { premise:premise, conclusion:conclusion };
+  }
+
+  function analyzeTriangles(groupedRaw){
+    var noTriangle = 0, dashedOnly = 0, xOnly = 0, totalDefective = 0;
+    groupedRaw.forEach(function(group){
+      var filledCount = group.rows.filter(function(r){ return r.subj && r.pred; }).length;
+      if(filledCount === 0) return;
+      var defective = false;
+      if(filledCount !== 3){
+        noTriangle++; defective = true;
+      } else {
+        var edges = computeGroupEdges(group);
+        var labelSet = {};
+        edges.forEach(function(e){ labelSet[e.fromLabel] = 1; labelSet[e.toLabel] = 1; });
+        var distinct = Object.keys(labelSet);
+        if(distinct.length !== 3){
+          noTriangle++; defective = true;
+        } else {
+          if(edges.every(function(e){ return !e.solid; })){ dashedOnly++; defective = true; }
+          if(distinct.every(function(l){ return l.indexOf('×') !== -1; })){ xOnly++; defective = true; }
+        }
+      }
+      if(defective) totalDefective++;
+    });
+    return { noTriangle:noTriangle, dashedOnly:dashedOnly, xOnly:xOnly, total:totalDefective };
+  }
+
+  function computeGraphStats(bundle, groupedRaw){
+    var pc = countPremiseConclusion(bundle.mergedEdges);
+    return {
+      components: countComponents(bundle.nodes, bundle.edges),
+      weakBridges: countWeakBridges(bundle.nodes, bundle.edges),
+      premise: pc.premise,
+      conclusion: pc.conclusion,
+      totalArrows: pc.premise + pc.conclusion,
+      ratio: pc.conclusion > 0 ? (pc.premise / pc.conclusion) : null,
+      defects: analyzeTriangles(groupedRaw)
+    };
+  }
+
+  function renderGraphStats(stats){
+    var grid = document.getElementById('statsGrid');
+    if(!grid) return;
+    var ratioText = stats.ratio === null ? 'N/A' : (stats.ratio.toFixed(2) + ' : 1');
+    grid.innerHTML =
+      '<div class="stat-chip' + (stats.components > 1 ? ' warn' : ' ok') + '">' +
+        '<div class="stat-value">' + stats.components + '<b>개</b></div>' +
+        '<div class="stat-label">분리된 그룹(연결 요소)</div>' +
+      '</div>' +
+      '<div class="stat-chip' + (stats.weakBridges > 0 ? ' warn' : '') + '">' +
+        '<div class="stat-value">' + stats.weakBridges + '<b>개</b></div>' +
+        '<div class="stat-label">약한 연결 — 화살표 하나로만 이어진 다리</div>' +
+      '</div>' +
+      '<div class="stat-chip">' +
+        '<div class="stat-value">' + stats.totalArrows + '<b>개</b></div>' +
+        '<div class="stat-label">전체 화살표</div>' +
+        '<div class="stat-sub">가정 ' + stats.premise + ' · 결론 ' + stats.conclusion + '</div>' +
+      '</div>' +
+      '<div class="stat-chip">' +
+        '<div class="stat-value">' + ratioText + '</div>' +
+        '<div class="stat-label">결론 화살표 대비 가정 화살표 비율</div>' +
+      '</div>' +
+      '<div class="stat-chip' + (stats.defects.total > 0 ? ' warn' : ' ok') + '">' +
+        '<div class="stat-value">' + stats.defects.total + '<b>개</b></div>' +
+        '<div class="stat-label">논리적으로 결함이 있는 삼각형</div>' +
+        '<div class="stat-sub">미형성 ' + stats.defects.noTriangle + ' · 점선만 ' + stats.defects.dashedOnly + ' · X만 ' + stats.defects.xOnly + '</div>' +
+      '</div>';
+  }
+
+  // =================================================================
+  // 9 valid categorical syllogism templates (unchanged)
+  // =================================================================
+  var TEMPLATES = [
+    {id:1, s1:{t:'A',s:'M',p:'P'}, s2:{t:'A',s:'S',p:'M'}, c:{t:'A',s:'S',p:'P'}, desc:'모든 M은 P이다 · 모든 S는 M이다 → 모든 S는 P이다'},
+    {id:2, s1:{t:'A',s:'M',p:'P'}, s2:{t:'A',s:'M',p:'S'}, c:{t:'I',s:'S',p:'P'}, desc:'모든 M은 P이다 · 모든 M은 S이다 → 어떤 S는 P이다'},
+    {id:3, s1:{t:'A',s:'P',p:'M'}, s2:{t:'A',s:'M',p:'S'}, c:{t:'I',s:'S',p:'P'}, desc:'모든 P는 M이다 · 모든 M은 S이다 → 어떤 S는 P이다'},
+    {id:4, s1:{t:'E',s:'M',p:'P'}, s2:{t:'A',s:'S',p:'M'}, c:{t:'E',s:'S',p:'P'}, desc:'모든 M은 P가 아니다 · 모든 S는 M이다 → 모든 S는 P가 아니다'},
+    {id:5, s1:{t:'E',s:'M',p:'P'}, s2:{t:'A',s:'M',p:'S'}, c:{t:'O',s:'S',p:'P'}, desc:'모든 M은 P가 아니다 · 모든 M은 S이다 → 어떤 S는 P가 아니다'},
+    {id:6, s1:{t:'A',s:'M',p:'P'}, s2:{t:'I',s:'S',p:'M'}, c:{t:'I',s:'S',p:'P'}, desc:'모든 M은 P이다 · 어떤 S는 M이다 → 어떤 S는 P이다'},
+    {id:7, s1:{t:'E',s:'M',p:'P'}, s2:{t:'I',s:'S',p:'M'}, c:{t:'O',s:'S',p:'P'}, desc:'모든 M은 P가 아니다 · 어떤 S는 M이다 → 어떤 S는 P가 아니다'},
+    {id:8, s1:{t:'A',s:'P',p:'M'}, s2:{t:'O',s:'S',p:'M'}, c:{t:'O',s:'S',p:'P'}, desc:'모든 P는 M이다 · 어떤 S는 M이 아니다 → 어떤 S는 P가 아니다'},
+    {id:9, s1:{t:'O',s:'M',p:'P'}, s2:{t:'A',s:'M',p:'S'}, c:{t:'O',s:'S',p:'P'}, desc:'어떤 M은 P가 아니다 · 모든 M은 S이다 → 어떤 S는 P가 아니다'}
+  ];
+
+  var SHAPES_TABLE = {
+    1:{M:'circle',S:'circle',P:'fan'},
+    2:{M:'circle',S:'fan',P:'fan'},
+    3:{M:'circle',S:'fan',P:'circle'},
+    4:{M:'circle',S:'circle',P:'fan'},
+    5:{M:'circle',S:'fan',P:'fan'},
+    6:{M:'circle',S:'fan',P:'fan'},
+    7:{M:'circle',S:'fan',P:'fan'},
+    8:{M:'circle',S:'fan',P:'fan'},
+    9:{M:'circle',S:'fan',P:'fan'}
+  };
+  var LAYOUT_TABLE = {
+    1:{order:['P','M','S'], negRoles:[]},
+    2:{order:['P','S','M'], negRoles:[]},
+    3:{order:['S','M','P'], negRoles:[]},
+    4:{order:['P','M','S'], negRoles:['P']},
+    5:{order:['P','S','M'], negRoles:['P']},
+    6:{order:['P','M','S'], negRoles:[]},
+    7:{order:['P','M','S'], negRoles:['P']},
+    8:{order:['P','M','S'], negRoles:['P','M']},
+    9:{order:['S','M','P'], negRoles:['P']}
+  };
+
+  function typeOf(r){ return r.quant === '모든' ? (r.predNeg ? 'E' : 'A') : (r.predNeg ? 'O' : 'I'); }
+
+  function normalizeStatement(r){
+    if(!r.subjNeg) return r;
+    if(r.quant === '모든' && r.predNeg) return { quant:'모든', subj:r.pred, subjNeg:false, pred:r.subj, predNeg:false };
+    if(r.quant === '어떤' && !r.predNeg) return { quant:'어떤', subj:r.pred, subjNeg:false, pred:r.subj, predNeg:true };
+    return null;
+  }
+
+  function matchGroup(rows){
+    if(rows.length !== 3) return null;
+    var normRows = rows.map(normalizeStatement);
+    if(normRows.some(function(r){ return r === null; })) return null;
+    var c = normRows[2];
+    var premiseOrders = [[0,1],[1,0]];
+    for(var ti=0; ti<TEMPLATES.length; ti++){
+      var T = TEMPLATES[ti];
+      for(var oi=0; oi<premiseOrders.length; oi++){
+        var i1 = premiseOrders[oi][0], i2 = premiseOrders[oi][1];
+        var p1 = normRows[i1], p2 = normRows[i2];
+        var roleMap = {}, wordMap = {};
+        var assign = function(word, role){
+          if(!word) return false;
+          if(roleMap[word] && roleMap[word] !== role) return false;
+          if(wordMap[role] && wordMap[role] !== word) return false;
+          roleMap[word] = role; wordMap[role] = word;
+          return true;
+        };
+        var ok = typeOf(p1) === T.s1.t && assign(p1.subj, T.s1.s) && assign(p1.pred, T.s1.p);
+        if(ok) ok = typeOf(p2) === T.s2.t && assign(p2.subj, T.s2.s) && assign(p2.pred, T.s2.p);
+        if(ok) ok = typeOf(c) === T.c.t && assign(c.subj, T.c.s) && assign(c.pred, T.c.p);
+        if(ok && wordMap.M && wordMap.S && wordMap.P){
+          var uniq = {}; uniq[wordMap.M]=1; uniq[wordMap.S]=1; uniq[wordMap.P]=1;
+          if(Object.keys(uniq).length === 3) return { template:T, roleToWord:wordMap, p1RowIndex:i1, p2RowIndex:i2 };
+        }
+      }
+    }
+    return null;
+  }
+
+  function evaluateGroupSyllogism(group){
+    if(!group.complete) return { status:'incomplete', groupIndex:group.index };
+    var m = matchGroup(group.rows);
+    if(!m) return { status:'invalid', groupIndex:group.index };
+    var id = m.template.id;
+    var layout = LAYOUT_TABLE[id];
+    var shapes = SHAPES_TABLE[id];
+    return {
+      status:'valid', groupIndex:group.index, templateId:id, templateDesc:m.template.desc, diagramType:'chain',
+      items: layout.order.map(function(role){
+        var neg = layout.negRoles.indexOf(role) !== -1;
+        var word = m.roleToWord[role];
+        return { role:role, word:word, neg:neg, label: labelOf(word, neg), shape: shapes[role] };
+      })
+    };
+  }
+
+  // ---------------------------------------------------------------
+  // Contradiction & cycle checks (unchanged)
+  // ---------------------------------------------------------------
+  function findContradictions(rawList){
+    var issues = [];
+    var map = {};
+    rawList.forEach(function(r){
+      var key = labelOf(r.subj, r.subjNeg) + '\u0001' + r.pred;
+      (map[key] = map[key] || []).push(r);
+    });
+    Object.keys(map).forEach(function(key){
+      var hasA=false, hasE=false, hasI=false, hasO=false;
+      map[key].forEach(function(r){
+        var all = (r.quant === '모든');
+        if(all && !r.predNeg) hasA = true;
+        if(all && r.predNeg) hasE = true;
+        if(!all && !r.predNeg) hasI = true;
+        if(!all && r.predNeg) hasO = true;
+      });
+      var parts = key.split('\u0001');
+      if(hasA && hasO) issues.push('모순: "모든 ' + parts[0] + '는 ' + parts[1] + '이다"와 "어떤 ' + parts[0] + '는 ' + parts[1] + '가 아니다"가 함께 성립할 수 없습니다.');
+      if(hasE && hasI) issues.push('모순: "모든 ' + parts[0] + '는 ' + parts[1] + '가 아니다"와 "어떤 ' + parts[0] + '는 ' + parts[1] + '이다"가 함께 성립할 수 없습니다.');
+    });
+    return issues;
+  }
+
+  function findCycles(rawList){
+    var adj = {};
+    rawList.forEach(function(r){
+      var from = labelOf(r.subj, r.subjNeg), to = labelOf(r.pred, r.predNeg);
+      (adj[from] = adj[from] || []).push(to);
+    });
+    var issues = [];
+    var visited = {}, onStack = {}, reported = {};
+    function dfs(node, path){
+      visited[node] = true; onStack[node] = true; path.push(node);
+      (adj[node] || []).forEach(function(next){
+        if(!visited[next]){ dfs(next, path.slice()); }
+        else if(onStack[next]){
+          var cyclePath = path.slice(path.indexOf(next)).concat(next);
+          var key = cyclePath.slice().sort().join('>');
+          if(!reported[key]){ reported[key] = true; issues.push('순환 논리: ' + cyclePath.join(' → ') + ' 로 되돌아오는 고리가 있습니다.'); }
+        }
+      });
+      onStack[node] = false;
+    }
+    Object.keys(adj).forEach(function(n){ if(!visited[n]) dfs(n, []); });
+    return issues;
+  }
+
+  function renderEvalList(groupResults, contradictions, cycles){
+    var ul = document.getElementById('evalList');
+    ul.innerHTML = '';
+    function addLi(text, cls){
+      var li = document.createElement('li');
+      li.textContent = text;
+      if(cls) li.className = cls;
+      ul.appendChild(li);
+    }
+    var anyProblem = false;
+    groupResults.forEach(function(g){
+      if(g.status === 'valid') addLi('세트 ' + g.groupIndex + ': 올바른 삼단논법입니다 (형식 ' + g.templateId + ' — ' + g.templateDesc + ')', 'ok');
+      else if(g.status === 'invalid'){ anyProblem = true; addLi('세트 ' + g.groupIndex + ': 9가지 표준 형식 중 어느 것과도 일치하지 않습니다 — 틀린 논법입니다.', null); }
+    });
+    contradictions.forEach(function(msg){ anyProblem = true; addLi(msg, null); });
+    cycles.forEach(function(msg){ anyProblem = true; addLi(msg, null); });
+    if(!anyProblem) addLi('발견된 논리적 결함이 없습니다. 모든 세트가 표준 삼단논법 형식에 부합합니다.', 'ok');
+  }
+
+  // =================================================================
+  // DIAGRAM GEOMETRY (fan / circle frames + spring physics)
+  // =================================================================
+  var CELL_W = 260, CELL_H = 300;
+  var BETA = 46 * Math.PI / 180;
+  var MARGIN = 0.82;
+  var SPRING_K = 0.16;
+  var HOME_K = 0.09;
+  var DAMPING = 0.72;
+  var SETTLE_EPS = 0.04;
+  var SETTLE_MAX_TICKS = 240;
+
+  function childFrame(parent, childType){
+    if(parent.type === 'circle'){
+      if(childType === 'circle') return { type:'circle', x:parent.x, y:parent.y, r:parent.r*MARGIN };
+      return { type:'fan', x:parent.x, y:parent.y, r:parent.r*MARGIN, beta:BETA };
+    }
+    if(childType === 'circle'){
+      var R = parent.r, beta = parent.beta;
+      var d = (R/(1+Math.sin(beta))) * MARGIN;
+      var rho = (R*Math.sin(beta)/(1+Math.sin(beta))) * MARGIN;
+      return { type:'circle', x:parent.x+d, y:parent.y, r:rho };
+    }
+    return { type:'fan', x:parent.x, y:parent.y, r:parent.r*MARGIN, beta:parent.beta*0.82 };
+  }
+
+  function clampCircleInCircle(cx,cy,cr, px,py,pr){
+    var dx = cx-px, dy = cy-py, dist = Math.hypot(dx,dy);
+    var maxDist = Math.max(0, pr-cr);
+    if(dist > maxDist){
+      if(dist < 1e-6) return { x:px+maxDist, y:py };
+      var k = maxDist/dist;
+      return { x:px+dx*k, y:py+dy*k };
+    }
+    return { x:cx, y:cy };
+  }
+  function clampInFan(cx,cy,cr, parent){
+    var lx = cx-parent.x, ly = cy-parent.y;
+    var sB = Math.sin(parent.beta), cB = Math.cos(parent.beta);
+    for(var i=0;i<5;i++){
+      var d1 = lx*sB - ly*cB;
+      if(d1 < cr){ var def1 = cr-d1; lx += def1*sB; ly += -def1*cB; }
+      var d2 = lx*sB + ly*cB;
+      if(d2 < cr){ var def2 = cr-d2; lx += def2*sB; ly += def2*cB; }
+      var dist = Math.hypot(lx,ly);
+      var maxDist = Math.max(0, parent.r-cr);
+      if(dist > maxDist){
+        if(dist < 1e-6){ lx = maxDist; ly = 0; }
+        else { var k = maxDist/dist; lx *= k; ly *= k; }
+      }
+    }
+    return { x:parent.x+lx, y:parent.y+ly };
+  }
+  function clampChildInParent(cx,cy,cr, parent){
+    return parent.type === 'circle' ? clampCircleInCircle(cx,cy,cr, parent.x,parent.y,parent.r) : clampInFan(cx,cy,cr, parent);
+  }
+
+  // Build the frame chain for one valid group, root at (rx,ry) with radius rr.
+  function buildFrames(groupResult, rx, ry, rr){
+    var items = groupResult.items;
+    var frames = [];
+    var root = items[0].shape === 'circle'
+      ? { type:'circle', x:rx + rr*0.5, y:ry, r:rr*0.72 }
+      : { type:'fan', x:rx, y:ry, r:rr, beta:BETA };
+    root.label = items[0].label; root.role = items[0].role; root.word = items[0].word; root.neg = items[0].neg;
+    root.parent = -1; root.vx = 0; root.vy = 0; root.homeX = root.x; root.homeY = root.y;
+    frames.push(root);
+    var prev = root;
+    for(var i=1;i<items.length;i++){
+      var f = childFrame(prev, items[i].shape);
+      f.label = items[i].label; f.role = items[i].role; f.word = items[i].word; f.neg = items[i].neg;
+      f.parent = frames.length-1; f.vx = 0; f.vy = 0;
+      f.idealDX = f.x - prev.x; f.idealDY = f.y - prev.y;
+      frames.push(f);
+      prev = f;
+    }
+    return frames;
+  }
+
+  function frameBBox(f){
+    if(f.type === 'circle') return { x0:f.x-f.r, x1:f.x+f.r, y0:f.y-f.r, y1:f.y+f.r };
+    var s = f.r * Math.sin(f.beta);
+    return { x0:f.x, x1:f.x+f.r, y0:f.y-s, y1:f.y+s };
+  }
+  function shiftFrames(frames, dx, dy){
+    frames.forEach(function(f){ f.x += dx; f.y += dy; if(f.homeX != null){ f.homeX += dx; f.homeY += dy; } });
+  }
+  // Build frames scaled so the whole set fits (fill * area), centred on (cx,cy).
+  function buildFramesFit(gr, cx, cy, aw, ah, fill){
+    var probe = buildFrames(gr, 0, 0, 100), bb = frameBBox(probe[0]);
+    var k = Math.min(aw*fill/(bb.x1-bb.x0), ah*fill/(bb.y1-bb.y0));
+    var frames = buildFrames(gr, 0, 0, 100*k);
+    var b2 = frameBBox(frames[0]);
+    shiftFrames(frames, cx - (b2.x0+b2.x1)/2, cy - (b2.y0+b2.y1)/2);
+    return frames;
+  }
+
+  function shapeCenter(f){ return f.type === 'circle' ? { x:f.x, y:f.y } : { x:f.x + f.r*0.6, y:f.y }; }
+  function inShape(f, px, py){
+    var dx = px-f.x, dy = py-f.y, d = Math.hypot(dx,dy);
+    if(d > f.r) return false;
+    if(f.type === 'circle') return true;
+    return Math.abs(Math.atan2(dy, dx)) <= f.beta;
+  }
+  function segDist(px,py, ax,ay, bx,by){
+    var vx = bx-ax, vy = by-ay, wx = px-ax, wy = py-ay;
+    var t = clamp((wx*vx + wy*vy) / (vx*vx + vy*vy || 1), 0, 1);
+    return Math.hypot(px-(ax+vx*t), py-(ay+vy*t));
+  }
+  // signed distance: negative inside the shape, positive outside
+  function signedDist(f, px, py){
+    var dx = px-f.x, dy = py-f.y, d = Math.hypot(dx,dy);
+    if(f.type === 'circle') return d - f.r;
+    var sB = Math.sin(f.beta), cB = Math.cos(f.beta);
+    var d1 = dx*sB - dy*cB, d2 = dx*sB + dy*cB;
+    if(d1 >= 0 && d2 >= 0 && d <= f.r) return -Math.min(f.r - d, d1, d2);
+    if(Math.abs(Math.atan2(dy, dx)) <= f.beta) return d - f.r;
+    return Math.min(
+      segDist(px,py, f.x,f.y, f.x+f.r*cB, f.y+f.r*sB),
+      segDist(px,py, f.x,f.y, f.x+f.r*cB, f.y-f.r*sB));
+  }
+  function sdNormal(f, px, py){
+    var e = 0.75;
+    var nx = signedDist(f, px+e, py) - signedDist(f, px-e, py);
+    var ny = signedDist(f, px, py+e) - signedDist(f, px, py-e);
+    var l = Math.hypot(nx, ny) || 1;
+    return { x:nx/l, y:ny/l };
+  }
+
+  function perimLength(f){ return f.type === 'circle' ? TAU*f.r : 2*f.r + 2*f.r*f.beta; }
+  function perimPoint(f, u){
+    u = fract(u);
+    if(f.type === 'circle'){ var a = u*TAU - Math.PI/2; return { x:f.x + f.r*Math.cos(a), y:f.y + f.r*Math.sin(a) }; }
+    var R = f.r, b = f.beta, tot = 2*R + 2*R*b, d = u*tot, k;
+    if(d < R){ k = d/R; return { x:f.x + Math.cos(-b)*R*k, y:f.y + Math.sin(-b)*R*k }; }
+    d -= R;
+    if(d < 2*R*b){ var ang = -b + d/R; return { x:f.x + R*Math.cos(ang), y:f.y + R*Math.sin(ang) }; }
+    d -= 2*R*b; k = 1 - d/R;
+    return { x:f.x + Math.cos(b)*R*k, y:f.y + Math.sin(b)*R*k };
+  }
+  function shapePath(ctx, f){
+    ctx.beginPath();
+    if(f.type === 'circle'){ ctx.arc(f.x, f.y, f.r, 0, TAU); }
+    else {
+      ctx.moveTo(f.x, f.y);
+      ctx.lineTo(f.x + f.r*Math.cos(-f.beta), f.y + f.r*Math.sin(-f.beta));
+      ctx.arc(f.x, f.y, f.r, -f.beta, f.beta);
+      ctx.closePath();
+    }
+  }
+
+  // Spring ("magnet") physics + hard containment clamp.
+  function physicsTick(frames, draggedIdx, desired, bounds, homeK){
+    homeK = homeK || HOME_K;
+    if(draggedIdx !== null && draggedIdx !== undefined){
+      frames[draggedIdx].x = desired.x; frames[draggedIdx].y = desired.y;
+      frames[draggedIdx].vx = 0; frames[draggedIdx].vy = 0;
+    }
+    var fx = frames.map(function(){ return 0; });
+    var fy = frames.map(function(){ return 0; });
+    frames.forEach(function(f, i){
+      if(f.parent === -1){
+        if(i === draggedIdx) return;
+        fx[i] += (f.homeX - f.x) * homeK;
+        fy[i] += (f.homeY - f.y) * homeK;
+      } else {
+        var p = frames[f.parent];
+        var childX = (i === draggedIdx) ? desired.x : f.x;
+        var childY = (i === draggedIdx) ? desired.y : f.y;
+        if(i !== draggedIdx){
+          fx[i] += ((p.x + f.idealDX) - f.x) * SPRING_K;
+          fy[i] += ((p.y + f.idealDY) - f.y) * SPRING_K;
+        }
+        if(f.parent !== draggedIdx){
+          fx[f.parent] += ((childX - f.idealDX) - p.x) * SPRING_K;
+          fy[f.parent] += ((childY - f.idealDY) - p.y) * SPRING_K;
+        }
+      }
+    });
+    frames.forEach(function(f, i){
+      if(i === draggedIdx) return;
+      f.vx = (f.vx + fx[i]) * DAMPING;
+      f.vy = (f.vy + fy[i]) * DAMPING;
+      f.x += f.vx; f.y += f.vy;
+    });
+    frames.forEach(function(f){
+      if(f.parent === -1) return;
+      var res = clampChildInParent(f.x, f.y, f.r, frames[f.parent]);
+      f.x = res.x; f.y = res.y;
+    });
+    frames.forEach(function(f){
+      if(f.parent !== -1) return;
+      f.x = clamp(f.x, f.r*0.2, bounds.w - f.r*0.2);
+      f.y = clamp(f.y, f.r*0.2, bounds.h - f.r*0.2);
+    });
+  }
+  function maxSpeed(frames){
+    var m = 0;
+    frames.forEach(function(f){ m = Math.max(m, Math.hypot(f.vx||0, f.vy||0)); });
+    return m;
+  }
+
+  // =================================================================
+  // DIAGRAM LIGHT EFFECTS (shared by the diagram view, video and game)
+  // =================================================================
+  function frameBaseHex(f){ return f.neg ? '#e08585' : (f.type === 'circle' ? '#e8c468' : '#7fb3d5'); }
+  function lightHex(base, idx, t){
+    if(FX.colorMode === 'single') return FX.color;
+    if(FX.colorMode === 'rainbow') return hslHex(idx*67 + t*50, 95, 62);
+    return base;
+  }
+
+  // Each semantic colour gets a curated tone family (highlight → deep) so
+  // lines can shimmer, bevel and gradient while staying clearly gold/blue/red.
+  var FAMILY = {
+    '#e8c468': ['#fff4d2','#f3d98f','#e8c468','#c4932f','#7f5a1a'],   // champagne gold
+    '#7fb3d5': ['#e6f5ff','#ade0ff','#7fb3d5','#4580b4','#1f4a72'],   // sapphire
+    '#e08585': ['#ffe3e3','#f4b0b0','#e08585','#bc4f58','#76252e']    // rose / garnet
+  };
+  function familyOf(hex){
+    return FAMILY[hex] || [mixHex(hex,'#ffffff',.82), mixHex(hex,'#ffffff',.42), hex, mixHex(hex,'#000000',.28), mixHex(hex,'#000000',.6)];
+  }
+  var HAS_CONIC = typeof CanvasRenderingContext2D !== 'undefined' && 'createConicGradient' in CanvasRenderingContext2D.prototype;
+  function ringGrad(ctx, f, a0, stops){
+    var c = shapeCenter(f), g;
+    if(HAS_CONIC) g = ctx.createConicGradient(a0, c.x, c.y);
+    else g = ctx.createLinearGradient(c.x + Math.cos(a0)*f.r, c.y + Math.sin(a0)*f.r, c.x - Math.cos(a0)*f.r, c.y - Math.sin(a0)*f.r);
+    stops.forEach(function(s){ g.addColorStop(s[0], s[1]); });
+    return g;
+  }
+  function tone(hex, wb, a){ return rgba(wb > 0 ? mixHex(hex, '#ffffff', wb) : hex, a); }
+
+  // contour d units inside the shape (negative d = outside)
+  function insetPath(ctx, f, d){
+    ctx.beginPath();
+    if(f.type === 'circle'){ ctx.arc(f.x, f.y, Math.max(.5, f.r - d), 0, TAU); return true; }
+    var sb = Math.sin(f.beta), vx = f.x + d/sb, R = f.r - d - d/sb;
+    if(R <= 1) return false;
+    ctx.moveTo(vx, f.y);
+    ctx.lineTo(vx + R*Math.cos(-f.beta), f.y + R*Math.sin(-f.beta));
+    ctx.arc(vx, f.y, R, -f.beta, f.beta);
+    ctx.closePath();
+    return true;
+  }
+  // polyline along the perimeter from u0 to u1 (0..1), keeping fan corners sharp
+  function perimPolyline(ctx, f, u0, u1, segs){
+    var us = [];
+    for(var j=0;j<=segs;j++) us.push(u0 + (u1 - u0)*j/segs);
+    if(f.type !== 'circle'){
+      var tot = 2*f.r + 2*f.r*f.beta;
+      [f.r/tot, (f.r + 2*f.r*f.beta)/tot].forEach(function(c){ if(c > u0 && c < u1) us.push(c); });
+      us.sort(function(a, b){ return a - b; });
+    }
+    ctx.beginPath();
+    us.forEach(function(uu, j){
+      var p = perimPoint(f, Math.min(uu, .99999));
+      if(j === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    });
+  }
+
+  // order index: 0 = first to light up (innermost when in→out)
+  function orderK(i, n){ return FX.pulseDir === 'in2out' ? (n-1-i) : i; }
+  function orderIdx(k, n){ return FX.pulseDir === 'in2out' ? (n-1-k) : k; }
+
+  var RELAY_LAP = 1.5;
+  function relayInfo(n, t){
+    var ph = fract(t/(n*RELAY_LAP))*n, k = Math.floor(ph);
+    return { k:k, p:ph - k };
+  }
+  // triangle wave 0 → n → 0 used by liquid fill and pen tracing
+  function sweepLevel(n, t){
+    var ph = fract(t/(n*1.3 + 1.6));
+    return ph < .62 ? (ph/.62)*n : Math.max(0, 1 - (ph - .62)/.38)*n;
+  }
+  function smooth01(x){ x = clamp(x, 0, 1); return x*x*(3 - 2*x); }
+
+  // 0..~1.3 brightness of shape i (0 = outermost) at time t
+  function shapeLevel(eff, i, n, t){
+    var k = orderK(i, n);
+    switch(eff){
+      case 'static': return .65;
+      case 'neon': {
+        var v = .8 + .08*Math.sin(t*9 + i*2.1) + .05*Math.sin(t*23 + i);
+        var slot = Math.floor(t*7 + i*13);
+        if(hash(slot) > .88) v *= .2 + .45*hash(slot + .5);
+        return v;
+      }
+      case 'blink': return fract(t*1.2) < .5 ? 1.05 : .08;
+      case 'alternate': return ((Math.floor(t*1.6) + i) % 2 === 0) ? 1.05 : .1;
+      case 'breathe': return .2 + .85*(.5 - .5*Math.cos(t*1.8));
+      case 'pulse': {
+        var ph = fract(t*.55 - k*.13);
+        return .16 + 1.1*Math.exp(-Math.pow((ph-.06)/.04, 2)) + .65*Math.exp(-Math.pow((ph-.2)/.045, 2));
+      }
+      case 'wave': {
+        var pw = fract(t*.42);
+        var on = clamp(pw*(n+1.6) - k, 0, 1);
+        if(pw > .82) on *= Math.max(0, (1-pw)/.18);
+        return .1 + on;
+      }
+      case 'relay': {
+        var r = relayInfo(n, t);
+        if(k === r.k) return .75 + .35*Math.sin(r.p*Math.PI);
+        var age = ((((r.k - k) % n) + n) % n - 1 + r.p)*RELAY_LAP;
+        return .16 + .55*Math.exp(-age*1.3);
+      }
+      case 'trace': return .14 + .5*smooth01(sweepLevel(n, t) - k);
+      case 'liquid': return .26 + .5*smooth01(sweepLevel(n, t) - k);
+      case 'dotmatrix': return .3;
+      case 'chase': case 'marquee': case 'sparkle': case 'orbits': case 'firefly': return .38;
+      case 'ripple': case 'scan': case 'aurora': case 'spotlight': case 'lightning': return .45;
+      default: return .6;
+    }
+  }
+
+  // ---------------- decorations drawn UNDER the outlines ----------------
+  function fxRipple(ctx, frames, t, u, bs, inten){
+    var root = frames[0], inner = frames[frames.length-1], c = shapeCenter(inner);
+    var dir = FX.pulseDir === 'in2out' ? 1 : -1;
+    ctx.save();
+    shapePath(ctx, root); ctx.clip();
+    var maxR = root.r*1.25, cnt = 2 + Math.round(FX.density/2);
+    for(var k=0;k<cnt;k++){
+      var p = fract(dir*t*.3 + k/cnt), rr = p*maxR, a = (1-p)*.85*inten;
+      var col = FX.colorMode === 'rainbow' ? hslHex(k*50 + t*60, 95, 62) : inner._lc;
+      ctx.beginPath(); ctx.arc(c.x, c.y, Math.max(.1, rr), 0, TAU);
+      ctx.strokeStyle = rgba(col, a);
+      ctx.lineWidth = 2.2*u*(1 - p*.5);
+      ctx.shadowColor = rgba(col, a); ctx.shadowBlur = 10*bs*inten;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function fxScan(ctx, frames, t, u, bs, inten){
+    var bb = frameBBox(frames[0]), w = bb.x1-bb.x0, band = Math.max(10*u, w*.22);
+    var x = bb.x0 - band + fract(t*.35)*(w + band*2);
+    frames.forEach(function(f){
+      ctx.save();
+      shapePath(ctx, f); ctx.clip();
+      var g = ctx.createLinearGradient(x - band/2, 0, x + band/2, 0);
+      g.addColorStop(0, rgba(f._lc, 0));
+      g.addColorStop(.5, rgba(mixHex(f._lc,'#ffffff',.3), .3*inten));
+      g.addColorStop(1, rgba(f._lc, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(x - band/2, bb.y0 - 5, band, bb.y1 - bb.y0 + 10);
+      ctx.restore();
+    });
+  }
+  function fxAurora(ctx, frames, t, u, bs, inten){
+    frames.forEach(function(f, i){
+      var fam = familyOf(f._lc), bb = frameBBox(f), H = bb.y1 - bb.y0, W = bb.x1 - bb.x0;
+      var freq = TAU/(W*.9 + 1);
+      ctx.save();
+      shapePath(ctx, f); ctx.clip();
+      ctx.lineCap = 'round';
+      for(var k=0;k<3;k++){
+        var yC = (bb.y0 + bb.y1)/2 + (k - 1)*H*.22;
+        ctx.beginPath();
+        for(var x=bb.x0 - 4*u; x<=bb.x1 + 4*u; x+=3*u){
+          var y = yC + Math.sin(x*freq + t*(.9 + k*.35) + i*1.7 + k*2.1)*H*.13 + Math.sin(x*freq*2.3 - t*.6 + k)*H*.04;
+          if(x === bb.x0 - 4*u) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.lineWidth = H*.16;
+        ctx.strokeStyle = rgba(fam[[1,0,3][k]], .1*Math.min(1.6, inten));
+        ctx.stroke();
+        ctx.lineWidth = H*.05;
+        ctx.strokeStyle = rgba(fam[0], .1*Math.min(1.6, inten));
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+  }
+  function fxLiquid(ctx, frames, t, u, bs, inten){
+    var n = frames.length, s = sweepLevel(n, t);
+    frames.forEach(function(f, i){
+      var q = smooth01(s - orderK(i, n));
+      if(q < .01) return;
+      var fam = familyOf(f._lc), bb = frameBBox(f), H = bb.y1 - bb.y0;
+      var level = bb.y1 - q*H, amp = 1.8*u*(q < .995 ? 1 : .4);
+      ctx.save();
+      shapePath(ctx, f); ctx.clip();
+      ctx.beginPath();
+      ctx.moveTo(bb.x0 - 3, bb.y1 + 3);
+      for(var x=bb.x0 - 3; x<=bb.x1 + 3; x+=2.5*u){
+        ctx.lineTo(x, level + Math.sin(x/(6*u) + t*3 + i)*amp + Math.sin(x/(2.7*u) - t*4.3)*amp*.35);
+      }
+      ctx.lineTo(bb.x1 + 3, bb.y1 + 3); ctx.closePath();
+      var g = ctx.createLinearGradient(0, level, 0, bb.y1);
+      g.addColorStop(0, rgba(fam[1], .34*Math.min(1.5, inten)));
+      g.addColorStop(1, rgba(fam[4], .2*Math.min(1.5, inten)));
+      ctx.fillStyle = g; ctx.fill();
+      // bright meniscus
+      ctx.beginPath();
+      for(var x2=bb.x0 - 3; x2<=bb.x1 + 3; x2+=2.5*u){
+        var y2 = level + Math.sin(x2/(6*u) + t*3 + i)*amp + Math.sin(x2/(2.7*u) - t*4.3)*amp*.35;
+        if(x2 === bb.x0 - 3) ctx.moveTo(x2, y2); else ctx.lineTo(x2, y2);
+      }
+      ctx.lineWidth = 1.2*u; ctx.strokeStyle = rgba(fam[0], .75*Math.min(1, inten));
+      ctx.shadowColor = fam[0]; ctx.shadowBlur = 8*bs*inten; ctx.stroke();
+      ctx.shadowBlur = 0;
+      // rising bubbles
+      for(var b=0;b<2 + Math.round(FX.density/3);b++){
+        var h1 = hash(i*17 + b*5.3), h2 = hash(i*3 + b*9.7 + 4);
+        var bx = bb.x0 + (.15 + .75*h1)*(bb.x1 - bb.x0) + Math.sin(t*2 + b)*u;
+        var by = bb.y1 - fract(t*.32*(.7 + h2) + h2)*(bb.y1 - level);
+        if(!inShape(f, bx, by) || by < level + 2*u) continue;
+        ctx.beginPath(); ctx.arc(bx, by, (.8 + 1.2*h2)*u, 0, TAU);
+        ctx.lineWidth = .7*u; ctx.strokeStyle = rgba(fam[0], .55); ctx.stroke();
+      }
+      ctx.restore();
+    });
+  }
+  function fxDotMatrix(ctx, frames, t, u, bs, inten){
+    var n = frames.length, root = frames[0], bb = frameBBox(root);
+    var sp = Math.max(3.6*u, (8.2 - FX.density*.45)*u);
+    var ic = shapeCenter(frames[n-1]), dir = FX.pulseDir === 'in2out' ? 1 : -1;
+    var fams = frames.map(function(f){ return familyOf(f._lc); });
+    var row = 0;
+    for(var y=bb.y0 + sp/2; y<bb.y1; y+=sp*.87, row++){
+      for(var x=bb.x0 + sp/2 + (row % 2 ? sp/2 : 0); x<bb.x1; x+=sp){
+        var hit = -1;
+        for(var i=n-1;i>=0;i--){ if(inShape(frames[i], x, y)){ hit = i; break; } }
+        if(hit < 0) continue;
+        var d = Math.hypot(x - ic.x, y - ic.y);
+        var b = Math.pow(.5 + .5*Math.sin(d/(9*u) - dir*t*3.2), 3);
+        var fam = fams[hit];
+        if(b > .55){
+          ctx.beginPath(); ctx.arc(x, y, sp*.5, 0, TAU);
+          ctx.fillStyle = rgba(fam[1], .14*b*Math.min(1.5, inten)); ctx.fill();
+        }
+        ctx.beginPath(); ctx.arc(x, y, sp*.24, 0, TAU);
+        ctx.fillStyle = rgba(b > .7 ? fam[0] : fam[2], (.1 + .85*b)*Math.min(1, inten));
+        ctx.fill();
+      }
+    }
+  }
+  function fxSpotlight(ctx, frames, t, u, bs, inten){
+    var root = frames[0], cx, cy, a, beams;
+    if(root.type === 'fan'){ cx = root.x; cy = root.y; a = Math.sin(t*.9)*root.beta*.85; beams = [a]; }
+    else { var c = shapeCenter(root); cx = c.x; cy = c.y; a = t*.8; beams = [a, a + Math.PI]; }
+    var R = root.r*2.2, w = .17;
+    ctx.save();
+    shapePath(ctx, root); ctx.clip();
+    beams.forEach(function(ba){
+      var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+      g.addColorStop(0, rgba('#ffffff', .34*Math.min(1.4, inten)));
+      g.addColorStop(.4, rgba(root._lc, .16*Math.min(1.4, inten)));
+      g.addColorStop(1, rgba(root._lc, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, ba - w, ba + w); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, ba - w*.35, ba + w*.35); ctx.closePath(); ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  // ---------------- decorations drawn OVER the outlines ----------------
+  function fxChase(ctx, frames, t, u, bs, inten){
+    frames.forEach(function(f, i){
+      var heads = Math.max(1, Math.round(FX.density/3)), tail = 16, dir = (i % 2) ? -1 : 1;
+      var stepU = (3*u) / perimLength(f);
+      for(var h=0; h<heads; h++){
+        var u0 = fract(dir*t*.16 + h/heads + i*.21);
+        for(var j=tail; j>=0; j--){
+          var p = perimPoint(f, u0 - dir*j*stepU), a = 1 - j/tail;
+          glowDot(ctx, p.x, p.y, (.6 + 2.2*a)*u, mixHex(f._lc, '#ffffff', .6*a), a*Math.min(1, inten), j === 0 ? 14*bs*inten : 0);
+        }
+      }
+    });
+  }
+  function fxMarquee(ctx, frames, t, u, bs, inten){
+    frames.forEach(function(f, i){
+      var cnt = 8 + FX.density*4, step = Math.floor(t*5);
+      for(var b=0;b<cnt;b++){
+        var p = perimPoint(f, b/cnt);
+        var on = ((b + step + i) % 3 === 0);
+        if(on) glowDot(ctx, p.x, p.y, 2.1*u, mixHex(f._lc, '#ffffff', .5), Math.min(1, inten), 12*bs*inten);
+        else glowDot(ctx, p.x, p.y, 1.6*u, f._lc, .2, 0);
+      }
+    });
+  }
+  function fxSparkle(ctx, frames, t, u, bs, inten){
+    frames.forEach(function(f, i){
+      var cnt = 3 + FX.density*2;
+      for(var j=0;j<cnt;j++){
+        var h1 = hash(i*97 + j*13.1), h2 = hash(i*31 + j*7.7 + 1), h3 = hash(j*3.3 + i + 2), h4 = hash(j*5.1 + i*2 + 3);
+        var rad = f.r*Math.sqrt(h1)*.9;
+        var ang = f.type === 'circle' ? h2*TAU : (-f.beta + 2*f.beta*h2)*.9;
+        var b = Math.pow(Math.max(0, Math.sin(t*(1.5 + 2*h3) + h4*TAU)), 10);
+        if(b < .02) continue;
+        drawStar(ctx, f.x + Math.cos(ang)*rad, f.y + Math.sin(ang)*rad, (1.5 + 4*b)*u, f._lc, b*Math.min(1, inten), 10*bs*inten);
+      }
+    });
+  }
+  // one light grain laps a shape once, then hands over to the next shape
+  function fxRelay(ctx, frames, t, u, bs, inten){
+    var n = frames.length, r = relayInfo(n, t), f = frames[orderIdx(r.k, n)];
+    var fam = familyOf(f._lc), per = perimLength(f);
+    // the part of the lap already travelled stays faintly lit
+    if(r.p > .01){
+      perimPolyline(ctx, f, 0, r.p, Math.max(6, Math.round(r.p*80)));
+      ctx.lineWidth = 1.8*u; ctx.strokeStyle = rgba(fam[1], .45*Math.min(1, inten));
+      ctx.shadowColor = fam[1]; ctx.shadowBlur = 8*bs*inten; ctx.stroke();
+    }
+    var tail = 26, step = (3.2*u)/per;
+    for(var j=tail;j>=0;j--){
+      var uu = r.p - j*step; if(uu < 0) continue;
+      var p = perimPoint(f, uu), a = 1 - j/tail;
+      glowDot(ctx, p.x, p.y, (.5 + 3*a)*u, mixHex(fam[0], '#ffffff', .5*a), a*Math.min(1, inten), j === 0 ? 20*bs*inten : 0);
+    }
+    // hand-over flash at the starting point
+    if(r.p < .14){
+      var s = perimPoint(f, 0), q = r.p/.14;
+      ctx.beginPath(); ctx.arc(s.x, s.y, (2 + 12*q)*u, 0, TAU);
+      ctx.lineWidth = 1.5*u; ctx.strokeStyle = rgba(fam[0], (1 - q)*.9);
+      ctx.shadowColor = fam[0]; ctx.shadowBlur = 14*bs*inten; ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+  }
+  // every shape has its own planet; inner orbits are faster (Kepler: ω ∝ r^-1.5)
+  function fxOrbits(ctx, frames, t, u, bs, inten){
+    var root = frames[0];
+    frames.forEach(function(f, i){
+      var w = Math.min(.6, .09*Math.pow(root.r/f.r, 1.5)), dir = (i % 2) ? -1 : 1;
+      var beads = FX.density > 6 ? 2 : 1, fam = familyOf(f._lc), per = perimLength(f), step = (2.6*u)/per;
+      for(var b=0;b<beads;b++){
+        var u0 = fract(dir*t*w + b/beads + i*.17);
+        for(var j=12;j>=0;j--){
+          var p = perimPoint(f, u0 - dir*j*step), a = 1 - j/12;
+          glowDot(ctx, p.x, p.y, (.5 + 2.4*a)*u, j === 0 ? '#ffffff' : fam[0], a*Math.min(1, inten), j === 0 ? 16*bs*inten : 0);
+        }
+      }
+    });
+    ctx.shadowBlur = 0;
+  }
+  function fxFirefly(ctx, frames, t, u, bs, inten){
+    frames.forEach(function(f, i){
+      var fam = familyOf(f._lc), cnt = 2 + FX.density;
+      for(var j=0;j<cnt;j++){
+        var h1 = hash(i*41 + j*3.9), h2 = hash(i*7 + j*11.3 + 2), h3 = hash(j*1.7 + i*5 + 3), h4 = hash(j*8.3 + i + 5);
+        var rad = f.r*(.18 + .68*fract(h1 + .07*Math.sin(t*.6*(.5 + h3) + h4*6)));
+        var ang = f.type === 'circle'
+          ? h2*TAU + t*.18*(h3 - .5)
+          : (-f.beta + 2*f.beta*fract(h2 + .05*Math.sin(t*.45 + h1*6)))*.86;
+        var x = f.x + Math.cos(ang)*rad, y = f.y + Math.sin(ang)*rad;
+        var b = .3 + .7*(.5 + .5*Math.sin(t*(.8 + h3) + h4*TAU));
+        glowDot(ctx, x, y, 4.2*u, fam[1], .1*b, 0);
+        glowDot(ctx, x, y, (1 + 1.4*b)*u, fam[0], b*Math.min(1, inten), 9*bs*inten);
+      }
+    });
+    ctx.shadowBlur = 0;
+  }
+  function fxLightning(ctx, frames, t, u, bs, inten){
+    for(var i=1;i<frames.length;i++){
+      var c = frames[i], p = frames[i-1];
+      var slot = Math.floor(t*10 + i*3.3);
+      if(hash(slot*.91 + i) < .42) continue;
+      var a = perimPoint(c, hash(slot*1.3 + i*7)), best = null, bd = 1e9;
+      for(var s=0;s<40;s++){
+        var q = perimPoint(p, s/40), d = Math.hypot(q.x - a.x, q.y - a.y);
+        if(d < bd && d > 4*u){ bd = d; best = q; }
+      }
+      if(!best) continue;
+      var dx = best.x - a.x, dy = best.y - a.y, len = Math.hypot(dx, dy) || 1, segs = 7;
+      ctx.beginPath();
+      for(var j=0;j<=segs;j++){
+        var k = j/segs, off = (j === 0 || j === segs) ? 0 : (hash(slot + j*2.7 + i) - .5)*len*.4;
+        var x = a.x + dx*k - dy/len*off, y = a.y + dy*k + dx/len*off;
+        if(j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      var col = mixHex(c._lc, p._lc, .5);
+      ctx.lineWidth = 2.6*u; ctx.strokeStyle = rgba(col, .5*Math.min(1, inten));
+      ctx.shadowColor = col; ctx.shadowBlur = 16*bs*inten; ctx.stroke();
+      ctx.lineWidth = .9*u; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.shadowBlur = 4*bs; ctx.stroke();
+      glowDot(ctx, a.x, a.y, 1.8*u, '#ffffff', .9, 10*bs);
+      glowDot(ctx, best.x, best.y, 1.8*u, '#ffffff', .9, 10*bs);
+    }
+    ctx.shadowBlur = 0;
+  }
+  // outlines are drawn on by a pen, one shape after another, then fade out
+  function fxTrace(ctx, frames, t, u, bs, inten){
+    var n = frames.length, s = sweepLevel(n, t);
+    frames.forEach(function(f, i){
+      var q = clamp(s - orderK(i, n), 0, 1);
+      if(q < .005) return;
+      var fam = familyOf(f._lc);
+      perimPolyline(ctx, f, 0, q, Math.max(6, Math.round(q*90)));
+      ctx.lineWidth = 2*u; ctx.strokeStyle = rgba(mixHex(fam[0], fam[2], .3), .95*Math.min(1, inten));
+      ctx.shadowColor = fam[1]; ctx.shadowBlur = 14*bs*inten; ctx.stroke();
+      if(q < 1){
+        var hp = perimPoint(f, q);
+        glowDot(ctx, hp.x, hp.y, 2.8*u, '#ffffff', 1, 18*bs*inten);
+      }
+    });
+    ctx.shadowBlur = 0;
+  }
+
+  var DECO_UNDER = { ripple:fxRipple, scan:fxScan, aurora:fxAurora, liquid:fxLiquid, dotmatrix:fxDotMatrix, spotlight:fxSpotlight };
+  var DECO_OVER = { chase:fxChase, marquee:fxMarquee, sparkle:fxSparkle, relay:fxRelay, orbits:fxOrbits, firefly:fxFirefly, lightning:fxLightning, trace:fxTrace };
+
+  // ---------------- line styles (premium outlines in the same colour family) ----------------
+  function coreStrokeStyle(ctx, f, i, t, fam, a, wb){
+    var dir = (i % 2) ? -1 : 1;
+    switch(FX.lineStyle){
+      case 'classic': return tone(f._lc, wb, a);
+      case 'gradient':
+        return ringGrad(ctx, f, dir*t*.35 + i*1.1, [
+          [0, tone(fam[1], wb*.4, a)], [.22, tone(fam[2], wb*.4, a)], [.45, tone(fam[3], wb*.4, a)],
+          [.62, tone(fam[2], wb*.4, a)], [.8, tone(fam[0], wb*.4, a)], [1, tone(fam[1], wb*.4, a)]]);
+      case 'double': case 'filigree':
+        return tone(fam[2], wb*.5, a);
+      case 'glass':
+        return tone(fam[1], wb*.5, a);
+      default: // metal: a polished band with a bright sheen travelling around it
+        return ringGrad(ctx, f, dir*t*.7 + i*1.3, [
+          [0, tone(fam[3], wb*.3, a)], [.1, tone(fam[2], wb*.3, a)], [.16, tone(fam[0], 0, a)],
+          [.2, tone('#ffffff', 0, a)], [.24, tone(fam[0], 0, a)], [.32, tone(fam[2], wb*.3, a)],
+          [.55, tone(fam[3], wb*.3, a)], [.7, tone(fam[1], wb*.3, a)], [.85, tone(fam[2], wb*.3, a)], [1, tone(fam[3], wb*.3, a)]]);
+    }
+  }
+  function lineStyleExtras(ctx, f, i, t, fam, L, u, bs, inten){
+    var Lc = Math.min(1, L);
+    ctx.shadowBlur = 0;
+    switch(FX.lineStyle){
+      case 'metal':
+        if(insetPath(ctx, f, 1.7*u)){ ctx.lineWidth = .5*u; ctx.strokeStyle = rgba('#ffffff', .18 + .2*Lc); ctx.stroke(); }
+        break;
+      case 'double':
+        if(insetPath(ctx, f, 3.4*u)){ ctx.lineWidth = .8*u; ctx.strokeStyle = rgba(fam[0], .45 + .4*Lc); ctx.stroke(); }
+        if(insetPath(ctx, f, -2.6*u)){ ctx.lineWidth = .6*u; ctx.strokeStyle = rgba(fam[1], .2 + .3*Lc); ctx.stroke(); }
+        break;
+      case 'filigree': {
+        var cnt = Math.min(150, Math.max(12, Math.round(perimLength(f)/(6.5*u))));
+        var s0 = fract(t*.22 + i*.31);
+        for(var b=0;b<cnt;b++){
+          var uu = b/cnt, p = perimPoint(f, uu);
+          var dd = Math.abs(uu - s0); dd = Math.min(dd, 1 - dd);
+          var shine = Math.exp(-Math.pow(dd/.06, 2));
+          var br = 1.25*u;
+          ctx.shadowBlur = shine > .3 ? 10*shine*bs*inten : 0; ctx.shadowColor = fam[0];
+          ctx.beginPath(); ctx.arc(p.x, p.y, br, 0, TAU);
+          ctx.fillStyle = rgba(mixHex(fam[3], fam[1], .35 + .5*Lc), .85); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.beginPath(); ctx.arc(p.x - br*.35, p.y - br*.35, br*.45, 0, TAU);
+          ctx.fillStyle = rgba(mixHex(fam[0], '#ffffff', shine), .35 + .6*shine); ctx.fill();
+        }
+        break;
+      }
+      case 'glass': {
+        ctx.save(); shapePath(ctx, f); ctx.clip();
+        shapePath(ctx, f); ctx.lineWidth = 7*u; ctx.strokeStyle = rgba(fam[0], .08 + .07*Lc); ctx.stroke();
+        ctx.restore();
+        var g0 = fract(t*.12 + i*.23);
+        perimPolyline(ctx, f, g0, g0 + .1, 14);
+        ctx.lineWidth = 1*u; ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+        ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 8*bs*inten; ctx.stroke();
+        ctx.shadowBlur = 0;
+        break;
+      }
+    }
+  }
+
+  // Draw a nested set of frames with the active light effect.
+  // o: {effect, effect2, unit, fontPx, blurScale, alpha, intensityMul, boost(f,i), lightOverride(f,i)}
+  function drawFrameSet(ctx, frames, t, o){
+    o = o || {};
+    var eff = o.effect || FX.diagram, n = frames.length;
+    var eff2 = o.effect2 !== undefined ? o.effect2 : FX.diagram2;
+    if(eff2 === eff) eff2 = 'none';
+    var inten = FX.intensity * (o.intensityMul == null ? 1 : o.intensityMul);
+    var bs = o.blurScale || 1, u = o.unit || 1;
+    ctx.save();
+    if(o.alpha != null) ctx.globalAlpha = o.alpha;
+    frames.forEach(function(f, i){
+      f.hasChild = frames.some(function(q){ return q.parent === i; });
+      f._lvl = shapeLevel(eff, i, n, t);
+      f._boost = o.boost ? o.boost(f, i) : 0;
+      f._base = frameBaseHex(f);
+      f._lc = (o.lightOverride && o.lightOverride(f, i)) || lightHex(f._base, i, t);
+      f._L = f._lvl + f._boost*1.4;
+    });
+    // soft fills, outer -> inner
+    frames.forEach(function(f){
+      var c = shapeCenter(f), L = Math.min(2, f._L);
+      shapePath(ctx, f);
+      var g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, f.r);
+      g.addColorStop(0, rgba(mixHex(f._base, f._lc, .4), .1 + .14*L));
+      g.addColorStop(1, rgba(f._base, .04 + .07*L));
+      ctx.fillStyle = g; ctx.fill();
+      if(FX.lineStyle !== 'classic'){
+        // inner rim glow that hugs the outline (glass-like depth)
+        ctx.save(); shapePath(ctx, f); ctx.clip();
+        shapePath(ctx, f); ctx.lineWidth = 9*u;
+        ctx.strokeStyle = rgba(familyOf(f._lc)[1], .06 + .06*L); ctx.stroke();
+        ctx.restore();
+      }
+    });
+    ctx.globalCompositeOperation = 'lighter';
+    [eff, eff2].forEach(function(e){ if(DECO_UNDER[e]) DECO_UNDER[e](ctx, frames, t, u, bs, inten); });
+    ctx.shadowBlur = 0;
+    // glowing outlines
+    ctx.lineJoin = 'round';
+    frames.forEach(function(f, i){
+      var L = Math.min(2.2, f._L), fam = familyOf(f._lc);
+      shapePath(ctx, f);
+      ctx.shadowColor = rgba(f._lc, Math.min(1, .25 + .45*L));
+      ctx.shadowBlur = (3 + 16*L)*bs*inten;
+      ctx.lineWidth = (3 + 5*L)*u;
+      ctx.strokeStyle = rgba(f._lc, (.06 + .08*L)*Math.min(1.5, inten));
+      ctx.stroke();
+      ctx.shadowBlur = (2 + 8*L)*bs*inten;
+      var coreW = (1.4 + 1.1*L + f._boost*1.2)*u;
+      if(FX.lineStyle === 'filigree') coreW *= .55;
+      ctx.lineWidth = coreW;
+      ctx.strokeStyle = coreStrokeStyle(ctx, f, i, t, fam, Math.min(1, .4 + .4*L), Math.min(.8, .1 + .22*L + .3*f._boost));
+      ctx.stroke();
+      lineStyleExtras(ctx, f, i, t, fam, L, u, bs, inten);
+    });
+    ctx.shadowBlur = 0;
+    [eff, eff2].forEach(function(e){ if(DECO_OVER[e]) DECO_OVER[e](ctx, frames, t, u, bs, inten); });
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowBlur = 0;
+    frames.forEach(function(f){ drawFrameLabel(ctx, f, o, bs); });
+    ctx.restore();
+  }
+
+  function drawFrameLabel(ctx, f, o, bs){
+    var b = Math.min(1, f._boost || 0);
+    var fp = (o.fontPx || 12.5) * (1 + .2*b);
+    var lx, ly;
+    if(f.type === 'circle'){ lx = f.x; ly = f.hasChild ? (f.y - f.r*0.6) : f.y; }
+    else { lx = f.hasChild ? (f.x - f.r*0.28) : (f.x + f.r*0.42); ly = f.y - (f.hasChild ? f.r*0.12 : 0); }
+    ctx.save();
+    ctx.font = '600 ' + fp.toFixed(1) + 'px "IBM Plex Mono", "IBM Plex Sans KR", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var col = f.neg ? '#ffb3b3' : '#f3f1e7';
+    if(b > .02){ ctx.shadowColor = rgba('#ffffff', .9*b); ctx.shadowBlur = 16*b*bs; col = mixHex(col, '#ffffff', b); }
+    ctx.fillStyle = col;
+    ctx.fillText(f.label, lx, ly);
+    ctx.restore();
+  }
+
+  // =================================================================
+  // DIAGRAM VIEW (canvas, pan/zoom/pinch, shape dragging)
+  // =================================================================
+  var diag = null;
+  var activeSim = null; // {cell, frameIdx, desired, dragging, settleTicks}
+
+  function stopDiagram(){
+    if(diag){
+      cancelAnimationFrame(diag.raf);
+      window.removeEventListener('resize', diag.onResize);
+      diag = null;
+    }
+    activeSim = null;
+  }
+
+  function roundRectPath(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y, x+w, y+r, r);
+    ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+    ctx.lineTo(x+r, y+h); ctx.arcTo(x, y+h, x, y+h-r, r);
+    ctx.lineTo(x, y+r); ctx.arcTo(x, y, x+r, y, r);
+    ctx.closePath();
+  }
+
+  function drawDiagramWorld(ctx, cells, t, bs){
+    cells.forEach(function(c){
+      ctx.save();
+      ctx.translate(c.ox, c.oy);
+      var cx = CELL_W/2;
+      if(c.g.status === 'valid'){
+        drawFrameSet(ctx, c.frames, t, { blurScale:bs, fontPx:12.5, unit:1 });
+        ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+        ctx.font = '500 12px "IBM Plex Mono", monospace'; ctx.fillStyle = '#8fcb9b';
+        ctx.fillText('세트 ' + c.g.groupIndex + ' · 형식 ' + c.g.templateId, cx, 260);
+        ctx.font = '400 10px "IBM Plex Sans KR", sans-serif'; ctx.fillStyle = '#a9b6b4';
+        ctx.fillText(c.g.templateDesc, cx, 278);
+      } else {
+        var invalid = c.g.status === 'invalid';
+        var col = invalid ? '#e08585' : '#a9b6b4';
+        roundRectPath(ctx, 26, 55, CELL_W-52, 130, 10);
+        ctx.fillStyle = invalid ? 'rgba(224,133,133,0.07)' : 'rgba(169,182,180,0.05)'; ctx.fill();
+        ctx.setLineDash(invalid ? [6,5] : [4,4]); ctx.lineWidth = 1.5; ctx.strokeStyle = col; ctx.stroke(); ctx.setLineDash([]);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = col;
+        if(invalid){
+          ctx.font = '400 24px "IBM Plex Mono", monospace'; ctx.fillText('×', cx, 115);
+          ctx.font = '400 11.5px "IBM Plex Sans KR", sans-serif'; ctx.fillText('올바른 삼단논법 형식이 아닙니다', cx, 145);
+          ctx.font = '400 12px "IBM Plex Mono", monospace'; ctx.fillText('세트 ' + c.g.groupIndex, cx, 260);
+        } else {
+          ctx.font = '400 11.5px "IBM Plex Sans KR", sans-serif'; ctx.fillText('입력이 완료되지 않았습니다', cx, 125);
+          ctx.font = '400 12px "IBM Plex Mono", monospace'; ctx.fillText('세트 ' + c.g.groupIndex + ' (미완성)', cx, 260);
+        }
+      }
+      ctx.restore();
+    });
+  }
+
+  function buildDiagramInto(container, groupResults){
+    stopDiagram();
+    container.innerHTML = '';
+    container.classList.add('diagram-mode');
+    var n = groupResults.length;
+    if(n === 0){
+      container.innerHTML = '<p class="hint" style="padding:20px;">표시할 세트가 없습니다.</p>';
+      return;
+    }
+    var cols = n <= 1 ? 1 : (n === 2 ? 2 : Math.min(3, Math.ceil(Math.sqrt(n))));
+    var rows = Math.ceil(n / cols);
+    var W = cols * CELL_W, H = rows * CELL_H;
+
+    var canvas = document.createElement('canvas');
+    canvas.className = 'diagram-canvas';
+    container.appendChild(canvas);
+
+    var cells = groupResults.map(function(g, i){
+      var c = { g:g, ox:(i % cols)*CELL_W, oy:Math.floor(i / cols)*CELL_H };
+      if(g.status === 'valid') c.frames = buildFrames(g, 64, 150, 78);
+      return c;
+    });
+
+    diag = { canvas:canvas, ctx:canvas.getContext('2d'), cells:cells, W:W, H:H, view:{ s:1, tx:0, ty:0 }, dpr:1, cw:0, ch:0, raf:0, fit:1 };
+
+    function resetView(){
+      var fit = Math.min(diag.cw/W, diag.ch/H);
+      diag.fit = fit;
+      diag.view.s = fit;
+      diag.view.tx = (diag.cw - W*fit)/2;
+      diag.view.ty = (diag.ch - H*fit)/2;
+    }
+    function resize(){
+      var r = container.getBoundingClientRect();
+      diag.dpr = window.devicePixelRatio || 1;
+      diag.cw = Math.max(10, r.width); diag.ch = Math.max(10, r.height);
+      canvas.width = Math.round(diag.cw*diag.dpr);
+      canvas.height = Math.round(diag.ch*diag.dpr);
+      resetView();
+    }
+    diag.onResize = function(){ if(diag) resize(); };
+    window.addEventListener('resize', diag.onResize);
+    resize();
+
+    function clampScale(s){ return clamp(s, diag.fit*0.4, diag.fit*4); }
+    function zoomAt(sx, sy, newS){
+      var v = diag.view; newS = clampScale(newS);
+      v.tx = sx - (sx - v.tx)*(newS/v.s);
+      v.ty = sy - (sy - v.ty)*(newS/v.s);
+      v.s = newS;
+    }
+
+    var zc = document.createElement('div');
+    zc.className = 'zoom-controls';
+    zc.innerHTML = '<button type="button" data-z="in">+</button><button type="button" data-z="out">−</button><button type="button" data-z="reset">⤾</button>';
+    container.appendChild(zc);
+    zc.addEventListener('click', function(e){
+      var btn = e.target.closest('button'); if(!btn) return;
+      if(btn.dataset.z === 'in') zoomAt(diag.cw/2, diag.ch/2, diag.view.s*1.2);
+      else if(btn.dataset.z === 'out') zoomAt(diag.cw/2, diag.ch/2, diag.view.s/1.2);
+      else resetView();
+    });
+
+    function screenPt(e){ var r = canvas.getBoundingClientRect(); return { x:e.clientX - r.left, y:e.clientY - r.top }; }
+    function toWorld(p){ var v = diag.view; return { x:(p.x - v.tx)/v.s, y:(p.y - v.ty)/v.s }; }
+    function hitShape(wp){
+      for(var ci=0; ci<cells.length; ci++){
+        var c = cells[ci]; if(!c.frames) continue;
+        var lx = wp.x - c.ox, ly = wp.y - c.oy;
+        if(lx < 0 || ly < 0 || lx > CELL_W || ly > CELL_H) continue;
+        for(var i=c.frames.length-1; i>=0; i--){
+          if(inShape(c.frames[i], lx, ly)) return { cell:c, idx:i, lx:lx, ly:ly };
+        }
+      }
+      return null;
+    }
+
+    canvas.addEventListener('wheel', function(e){
+      e.preventDefault();
+      var p = screenPt(e);
+      zoomAt(p.x, p.y, diag.view.s * (e.deltaY > 0 ? 0.9 : 1.1));
+    }, { passive:false });
+
+    var pointers = new Map(), drag = null, pan = null, pinch = null;
+    canvas.addEventListener('pointerdown', function(e){
+      var p = screenPt(e);
+      pointers.set(e.pointerId, p);
+      canvas.setPointerCapture(e.pointerId);
+      if(pointers.size === 2 && !drag){
+        var pts = Array.from(pointers.values());
+        pinch = { d0:Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y) || 1, s0:diag.view.s };
+        pan = null;
+        return;
+      }
+      if(pointers.size > 1) return;
+      var hit = hitShape(toWorld(p));
+      if(hit){
+        var f = hit.cell.frames[hit.idx];
+        drag = { cell:hit.cell, idx:hit.idx, off:{ x:hit.lx - f.x, y:hit.ly - f.y }, pid:e.pointerId };
+        activeSim = { cell:hit.cell, frameIdx:hit.idx, desired:{ x:f.x, y:f.y }, dragging:true, settleTicks:0 };
+      } else {
+        pan = { start:p, origin:{ x:diag.view.tx, y:diag.view.ty } };
+      }
+    });
+    canvas.addEventListener('pointermove', function(e){
+      var p = screenPt(e);
+      if(pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
+      if(pinch && pointers.size === 2){
+        var pts = Array.from(pointers.values());
+        var d = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+        zoomAt((pts[0].x+pts[1].x)/2, (pts[0].y+pts[1].y)/2, pinch.s0 * d / pinch.d0);
+        return;
+      }
+      if(drag && e.pointerId === drag.pid && activeSim){
+        var wp = toWorld(p);
+        activeSim.desired = { x:wp.x - drag.cell.ox - drag.off.x, y:wp.y - drag.cell.oy - drag.off.y };
+        return;
+      }
+      if(pan){
+        diag.view.tx = pan.origin.x + (p.x - pan.start.x);
+        diag.view.ty = pan.origin.y + (p.y - pan.start.y);
+        return;
+      }
+      if(e.pointerType === 'mouse') canvas.style.cursor = hitShape(toWorld(p)) ? 'grab' : 'default';
+    });
+    function endPointer(e){
+      pointers.delete(e.pointerId);
+      if(pointers.size < 2) pinch = null;
+      if(drag && e.pointerId === drag.pid){
+        if(activeSim){ activeSim.dragging = false; activeSim.settleTicks = 0; }
+        drag = null;
+      }
+      if(pointers.size === 0) pan = null;
+    }
+    canvas.addEventListener('pointerup', endPointer);
+    canvas.addEventListener('pointercancel', endPointer);
+
+    function loop(){
+      if(!diag) return;
+      if(activeSim){
+        var fr = activeSim.cell.frames;
+        physicsTick(fr, activeSim.dragging ? activeSim.frameIdx : null, activeSim.desired, { w:CELL_W, h:CELL_H-40 });
+        if(!activeSim.dragging){
+          activeSim.settleTicks++;
+          if(maxSpeed(fr) < SETTLE_EPS || activeSim.settleTicks > SETTLE_MAX_TICKS) activeSim = null;
+        }
+      }
+      var ctx = diag.ctx, d = diag.dpr, v = diag.view;
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.setTransform(d*v.s, 0, 0, d*v.s, d*v.tx, d*v.ty);
+      drawDiagramWorld(ctx, cells, performance.now()/1000*FX.speed, v.s*d);
+      diag.raf = requestAnimationFrame(loop);
+    }
+    diag.raf = requestAnimationFrame(loop);
+  }
+
+  function legendIcon(shape){
+    if(shape === 'circle') return '<circle cx="8" cy="8" r="7" fill="rgba(232,196,104,0.25)" stroke="#e8c468" stroke-width="1.5"/>';
+    var r = 7, a1 = -BETA, a2 = BETA;
+    var d = 'M 1,8 L ' + (1 + r*Math.cos(a1)).toFixed(1) + ',' + (8 + r*Math.sin(a1)).toFixed(1) +
+      ' A 7,7 0 0 1 ' + (1 + r*Math.cos(a2)).toFixed(1) + ',' + (8 + r*Math.sin(a2)).toFixed(1) + ' Z';
+    return '<path d="' + d + '" fill="rgba(127,179,213,0.25)" stroke="#7fb3d5" stroke-width="1.5"/>';
+  }
+
+  // =================================================================
+  // GRAPH VIEW (vis-network + custom glossy nodes + LED arrows)
+  // =================================================================
+  var network = null;
+  var currentGraphBundle = null;
+  var currentNodesDS = null, currentEdgesDS = null;
+  var currentGroupResults = null;
+  var currentGrouped = null;
+  var isDiagram = false;
+  var graphRaf = 0;
+  var hoverNodeId = null;
+
+  var graphOptions = {
+    nodes:{ shape:'dot' },
+    edges:{ arrows:{ to:{ enabled:true, scaleFactor:0.7 } }, smooth:{ type:'continuous' } },
+    physics:{ enabled:true, solver:'forceAtlas2Based',
+      forceAtlas2Based:{ gravitationalConstant:-80, springLength:140, springConstant:0.06, avoidOverlap:0.7 },
+      stabilization:{ iterations:180 } },
+    interaction:{ dragNodes:true, dragView:true, zoomView:true, hover:true }
+  };
+
+  function edgePt(be, s){
+    try{
+      var p = be.edgeType.getPoint(s);
+      if(p && isFinite(p.x) && isFinite(p.y)) return p;
+    }catch(err){}
+    return { x:be.from.x + (be.to.x - be.from.x)*s, y:be.from.y + (be.to.y - be.from.y)*s };
+  }
+  function edgeLight(e, ei, t){
+    if(FX.colorMode === 'single') return FX.color;
+    if(FX.colorMode === 'rainbow') return hslHex(ei*47 + t*60, 95, 62);
+    return e._contra ? CONTRADICTION_LIGHT : e._base;
+  }
+  function polyline(ctx, P, n, a0, a1){
+    ctx.beginPath();
+    for(var j=0;j<=n;j++){
+      var p = P(a0 + (a1 - a0)*j/n);
+      if(j === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
+  }
+
+  var EDGE_FX = {
+    flow: function(ctx, P, len, lc, t, ei, bs, inten){
+      var spacing = Math.max(14, 160/FX.density), cnt = Math.max(1, Math.round(len/spacing));
+      var head = mixHex(lc, '#ffffff', .55);
+      for(var k=0;k<cnt;k++){
+        var u = fract(t*90/len + k/cnt);
+        for(var j=3;j>=0;j--){
+          var uu = u - j*(5/len); if(uu < 0) continue;
+          var p = P(uu), a = 1 - j/4;
+          glowDot(ctx, p.x, p.y, 1.2 + 2*a, j === 0 ? head : lc, a*Math.min(1, inten), j === 0 ? 12*bs*inten : 0);
+        }
+      }
+    },
+    comet: function(ctx, P, len, lc, t, ei, bs, inten){
+      var heads = Math.max(1, Math.round(FX.density/4)), tail = 18;
+      for(var h=0;h<heads;h++){
+        var u0 = fract(t*110/len + h/heads + ei*.37);
+        for(var j=tail;j>=0;j--){
+          var uu = u0 - j*(4/len); if(uu < 0) continue;
+          var p = P(uu), a = 1 - j/tail;
+          glowDot(ctx, p.x, p.y, .6 + 3*a, mixHex(lc, '#ffffff', .6*a), a*Math.min(1, inten), j === 0 ? 16*bs*inten : 0);
+        }
+      }
+    },
+    pulse: function(ctx, P, len, lc, t, ei, bs, inten){
+      var band = Math.min(.45, 70/len), u0 = fract(t*70/len + ei*.29) * (1 + band), segs = 12;
+      ctx.lineCap = 'round';
+      for(var j=0;j<segs;j++){
+        var ua = u0 - band*j/segs, ub = ua - band/segs;
+        if(ub < 0 || ua > 1) continue;
+        var a = 1 - j/segs, p1 = P(ua), p2 = P(ub);
+        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+        ctx.lineWidth = 1 + 4.5*a;
+        ctx.strokeStyle = rgba(mixHex(lc, '#ffffff', .4*a), a*.9*Math.min(1, inten));
+        ctx.shadowColor = rgba(lc, a); ctx.shadowBlur = 14*a*bs*inten;
+        ctx.stroke();
+      }
+    },
+    dash: function(ctx, P, len, lc, t, ei, bs, inten){
+      polyline(ctx, P, 24, 0, 1);
+      ctx.setLineDash([7, 11]); ctx.lineDashOffset = -t*50;
+      ctx.lineWidth = 3; ctx.strokeStyle = rgba(mixHex(lc, '#ffffff', .3), .9*Math.min(1, inten));
+      ctx.shadowColor = lc; ctx.shadowBlur = 12*bs*inten;
+      ctx.stroke(); ctx.setLineDash([]);
+    },
+    spark: function(ctx, P, len, lc, t, ei, bs, inten){
+      var slot = Math.floor(t*14);
+      if(hash(slot*1.7 + ei*13) < .35) return;
+      var n = 16;
+      ctx.beginPath();
+      for(var j=0;j<=n;j++){
+        var u = j/n, p = P(u), q = P(Math.min(1, u + .01)), r = P(Math.max(0, u - .01));
+        var tx = q.x - r.x, ty = q.y - r.y, tl = Math.hypot(tx, ty) || 1;
+        var off = (j === 0 || j === n) ? 0 : (hash(slot + j*3.1 + ei) - .5)*12;
+        var x = p.x - ty/tl*off, y = p.y + tx/tl*off;
+        if(j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.lineWidth = 3.2; ctx.strokeStyle = rgba(lc, .5*Math.min(1, inten));
+      ctx.shadowColor = lc; ctx.shadowBlur = 16*bs*inten; ctx.stroke();
+      ctx.lineWidth = 1.2; ctx.strokeStyle = rgba('#ffffff', .95); ctx.shadowBlur = 4*bs; ctx.stroke();
+    },
+    blink: function(ctx, P, len, lc, t, ei, bs, inten){
+      var on = fract(t*1.1) < .5;
+      polyline(ctx, P, 24, 0, 1);
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = rgba(mixHex(lc, '#ffffff', on ? .35 : 0), (on ? .95 : .08)*Math.min(1, inten));
+      ctx.shadowColor = lc; ctx.shadowBlur = (on ? 16 : 0)*bs*inten;
+      ctx.stroke();
+    },
+    none: function(){}
+  };
+
+  function drawGraphFX(ctx){
+    var B = currentGraphBundle; if(!network || !B || FX.graphEdge === 'none') return;
+    var t = performance.now()/1000*FX.speed, inten = FX.intensity;
+    var bs = network.getScale() * (window.devicePixelRatio || 1);
+    var bodyE = network.body.edges, bodyN = network.body.nodes;
+    var fxFn = EDGE_FX[FX.graphEdge] || EDGE_FX.flow;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    B.edges.forEach(function(e, ei){
+      if(e.from === e.to) return;
+      var be = bodyE[e.id]; if(!be || be.options.hidden) return;
+      var fn = bodyN[e.from], tn = bodyN[e.to];
+      if(!fn || !tn || fn.options.hidden || tn.options.hidden) return;
+      var rf = B.nodeInfo[e.from].r, rt = B.nodeInfo[e.to].r;
+      var L = Math.hypot(tn.x - fn.x, tn.y - fn.y);
+      if(L < rf + rt + 6) return;
+      var s0 = (rf + 2)/L, s1 = 1 - (rt + 9)/L, len = L*(s1 - s0);
+      var P = function(u){ return edgePt(be, s0 + (s1 - s0)*clamp(u, 0, 1)); };
+      fxFn(ctx, P, len, edgeLight(e, ei, t), t, ei, bs, inten);
+      ctx.shadowBlur = 0;
+    });
+    ctx.restore();
+  }
+
+  function drawGraphNodes(ctx){
+    var B = currentGraphBundle; if(!network || !B) return;
+    var t = performance.now()/1000*FX.speed, inten = FX.intensity;
+    var bs = network.getScale() * (window.devicePixelRatio || 1);
+    var bodyN = network.body.nodes;
+    var sel = network.getSelectedNodes();
+    var order = B.nodes.slice().sort(function(a, b){ return (B.nodeInfo[a.id].paired ? 1 : 0) - (B.nodeInfo[b.id].paired ? 1 : 0); });
+    order.forEach(function(n){
+      var bn = bodyN[n.id]; if(!bn || bn.options.hidden) return;
+      var info = B.nodeInfo[n.id];
+      var base = info.neg ? '#e08585' : '#e8c468';
+      var lc = FX.colorMode === 'single' ? FX.color : (FX.colorMode === 'rainbow' ? hslHex(n.id*53 + t*50, 95, 62) : base);
+      var glow;
+      if(FX.graphNode === 'breathe') glow = .25 + .9*(.5 - .5*Math.cos(t*2 + n.id));
+      else if(FX.graphNode === 'none') glow = 0;
+      else glow = .45;
+      if(hoverNodeId === n.id) glow += .4;
+      var isSel = sel.indexOf(n.id) !== -1;
+      if(isSel) glow += .5;
+      drawSphere(ctx, bn.x, bn.y, info.r, base, {
+        glow: glow*inten, glowColor: lc, blur: 22*bs,
+        text: info.text, textColor: info.neg ? '#2a0c0c' : '#1b1503',
+        fontPx: info.paired ? 16 : NODE_FONT_PX, selected: isSel
+      });
+      if(FX.graphNode === 'orbit' || FX.graphNode === 'twinkle'){
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        if(FX.graphNode === 'orbit'){
+          for(var k=0;k<2;k++){
+            var dir = k ? -1 : 1, a0 = t*2.2*dir + n.id + k*Math.PI;
+            for(var j=10;j>=0;j--){
+              var aa = a0 - j*.07*dir, al = 1 - j/10;
+              glowDot(ctx, bn.x + Math.cos(aa)*(info.r + 5), bn.y + Math.sin(aa)*(info.r + 5), .6 + 2*al,
+                mixHex(lc, '#ffffff', .5*al), al*Math.min(1, inten), j === 0 ? 12*bs*inten : 0);
+            }
+          }
+        } else {
+          for(var s=0;s<4;s++){
+            var h1 = hash(n.id*11 + s*3.7), h2 = hash(n.id*5 + s*9.1), h3 = hash(n.id + s*2.3);
+            var bb = Math.pow(Math.max(0, Math.sin(t*(1.6 + h3*2) + h1*TAU)), 12);
+            var rr = info.r*(.3 + .65*h2), ang = h1*TAU;
+            drawStar(ctx, bn.x + Math.cos(ang)*rr, bn.y + Math.sin(ang)*rr, 2 + 5*bb, lc, bb*Math.min(1, inten), 12*bs*inten);
+          }
+        }
+        ctx.restore();
+      }
+    });
+  }
+
+  function stopGraphAnim(){ if(graphRaf){ cancelAnimationFrame(graphRaf); graphRaf = 0; } }
+  function startGraphAnim(){
+    stopGraphAnim();
+    (function loop(){
+      if(!network || isDiagram){ graphRaf = 0; return; }
+      network.redraw();
+      graphRaf = requestAnimationFrame(loop);
+    })();
+  }
+
+  function renderGraphView(){
+    stopDiagram();
+    var container = document.getElementById('network');
+    container.classList.remove('diagram-mode');
+    container.innerHTML = '';
+    var B = currentGraphBundle;
+    currentNodesDS = new vis.DataSet(B.nodes);
+    currentEdgesDS = new vis.DataSet(B.edges);
+    network = new vis.Network(container, { nodes:currentNodesDS, edges:currentEdgesDS }, graphOptions);
+    hoverNodeId = null;
+
+    // Keep each "×" sphere glued to the right side of its plain term.
+    network.on('beforeDrawing', function(){
+      var bn = network.body.nodes;
+      B.pairs.forEach(function(p){
+        var b = bn[p.baseId], x = bn[p.negId]; if(!b || !x) return;
+        var off = B.nodeInfo[p.baseId].r + B.nodeInfo[p.negId].r + 3;
+        if(p.dragNeg){ b.x = x.x - off; b.y = x.y; }
+        else { x.x = b.x + off; x.y = b.y; }
+      });
+    });
+    network.on('afterDrawing', function(ctx){
+      drawGraphFX(ctx);
+      drawGraphNodes(ctx);
+    });
+    network.on('dragStart', function(params){
+      B.pairs.forEach(function(p){ p.dragNeg = params.nodes.indexOf(p.negId) !== -1; });
+    });
+    network.on('dragEnd', function(){ B.pairs.forEach(function(p){ p.dragNeg = false; }); });
+    network.on('hoverNode', function(p){ hoverNodeId = p.node; });
+    network.on('blurNode', function(){ hoverNodeId = null; });
+
+    network.on('doubleClick', function(params){
+      if(params.nodes && params.nodes.length === 1){
+        var nid = params.nodes[0];
+        B.triples.forEach(function(t){
+          if(t.middleNodeId === nid){
+            t.conclHidden = !t.conclHidden;
+            currentEdgesDS.update({ id:t.conclusionEdgeId, hidden:t.conclHidden });
+          }
+        });
+      } else if(params.edges && params.edges.length === 1 && (!params.nodes || params.nodes.length === 0)){
+        var eid = params.edges[0];
+        B.triples.forEach(function(t){
+          if(t.conclusionEdgeId === eid){
+            t.midHidden = !t.midHidden;
+            currentNodesDS.update({ id:t.middleNodeId, hidden:t.midHidden });
+            currentEdgesDS.update([
+              { id:t.premiseEdgeIds[0], hidden:t.midHidden },
+              { id:t.premiseEdgeIds[1], hidden:t.midHidden }
+            ]);
+          }
+        });
+      }
+    });
+
+    startGraphAnim();
+
+    document.getElementById('dragHint').textContent =
+      '노드를 드래그해서 위치를 옮길 수 있습니다. 부정형은 원래 개념 노드 오른쪽에 붙은 작은 × 노드로 표시되고 함께 움직입니다. 가운데(중간 개념) 노드를 더블클릭하면 결론 화살표를, 결론 화살표를 더블클릭하면 중간 노드를 숨기거나 다시 보이게 할 수 있습니다.';
+    document.getElementById('legendBox').innerHTML =
+      '<span><i class="ls-solid"></i> 모든 (전칭)</span>' +
+      '<span><i class="ls-dashed"></i> 어떤 (특칭)</span>' +
+      '<span><i class="ls-premise"></i> 가정 화살표</span>' +
+      '<span><i class="ls-conclusion"></i> 결론 화살표</span>' +
+      '<span><i class="ls-exception"></i> 역할 불명 (삼각형 미형성)</span>' +
+      '<span><i class="ls-contradiction"></i> 모순 (같은 노드에서 X·X× 모두로 전칭)</span>' +
+      '<span><b>×</b> 부정(아니다)</span>';
+  }
+
+  function renderDiagramView(){
+    stopGraphAnim();
+    if(network){ network.destroy(); network = null; }
+    buildDiagramInto(document.getElementById('network'), currentGroupResults);
+    document.getElementById('dragHint').textContent =
+      '도형을 드래그하면 자석처럼 서로 끌어당기며 나머지 도형도 함께 따라 움직입니다 (안쪽 도형은 바깥 도형을 절대 벗어나지 않습니다). 손을 떼면 자연스럽게 제자리로 정렬됩니다. 휠·두 손가락·우측 하단 버튼으로 확대·축소, 빈 공간 드래그로 화면 이동이 가능합니다.';
+    document.getElementById('legendBox').innerHTML =
+      '<span><svg width="16" height="16">' + legendIcon('circle') + '</svg> 원 = 전칭(모든)</span>' +
+      '<span><svg width="16" height="16">' + legendIcon('fan') + '</svg> 부채꼴 = 특칭(어떤)</span>' +
+      '<span><b>×</b> 부정(아니다)</span>';
+  }
+
+  function renderCurrentView(){
+    document.getElementById('fxCard').dataset.mode = isDiagram ? 'diagram' : 'graph';
+    if(isDiagram) renderDiagramView(); else renderGraphView();
+  }
+
+  // =================================================================
+  // VIEW SWITCHING / MAIN ACTIONS
+  // =================================================================
+  var inputView = document.getElementById('inputView');
+  var resultView = document.getElementById('resultView');
+
+  document.getElementById('doneBtn').addEventListener('click', function(){
+    var flat = collectFlatRaw();
+    if(flat.length === 0){ alert('최소 한 문장 이상 단어를 입력해주세요.'); return; }
+    var grouped = collectGroupedRaw();
+    currentGrouped = grouped;
+    currentGraphBundle = buildGraphAndTriples(grouped);
+    currentGroupResults = grouped.map(evaluateGroupSyllogism);
+
+    var contradictions = findContradictions(flat);
+    var cycles = findCycles(flat);
+
+    isDiagram = false;
+    inputView.classList.add('hidden');
+    resultView.classList.remove('hidden');
+    document.getElementById('viewTitle').textContent = '논리 그래프';
+    document.getElementById('toggleBtn').textContent = '다이어그램으로 보기';
+
+    renderCurrentView();
+    renderGraphStats(computeGraphStats(currentGraphBundle, grouped));
+    renderEvalList(currentGroupResults, contradictions, cycles);
+  });
+
+  document.getElementById('toggleBtn').addEventListener('click', function(){
+    isDiagram = !isDiagram;
+    document.getElementById('viewTitle').textContent = isDiagram ? '논리 다이어그램' : '논리 그래프';
+    document.getElementById('toggleBtn').textContent = isDiagram ? '그래프로 보기' : '다이어그램으로 보기';
+    renderCurrentView();
+  });
+
+  document.getElementById('backBtn').addEventListener('click', function(){
+    stopGraphAnim(); stopDiagram();
+    if(network){ network.destroy(); network = null; }
+    resultView.classList.add('hidden');
+    inputView.classList.remove('hidden');
+  });
+
+  document.getElementById('saveImgBtn').addEventListener('click', function(){
+    if(isDiagram){
+      if(!diag){ alert('저장할 다이어그램이 없습니다.'); return; }
+      var scale = 2, c = document.createElement('canvas');
+      c.width = diag.W*scale; c.height = diag.H*scale;
+      var ctx = c.getContext('2d');
+      ctx.fillStyle = '#161d1f'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.scale(scale, scale);
+      drawDiagramWorld(ctx, diag.cells, performance.now()/1000*FX.speed, scale);
+      triggerDownload(c.toDataURL('image/png'), '삼단논법_다이어그램.png');
+    } else {
+      if(!network) return;
+      try{ triggerDownload(network.canvas.frame.canvas.toDataURL('image/png'), '삼단논법_그래프.png'); }
+      catch(err){ alert('이미지 저장에 실패했습니다: ' + err.message); }
+    }
+  });
+
+  function triggerDownload(url, filename){
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+
+  function validResults(){
+    return (currentGroupResults || []).filter(function(g){ return g.status === 'valid'; });
+  }
+  function fillSetSelect(sel){
+    sel.innerHTML = validResults().map(function(g){
+      return '<option value="' + g.groupIndex + '">세트 ' + g.groupIndex + ' · 형식 ' + g.templateId + '</option>';
+    }).join('');
+  }
+  function resultByIndex(gi){
+    return (currentGroupResults || []).filter(function(g){ return g.groupIndex === gi; })[0];
+  }
+  function lockScroll(on){ document.body.style.overflow = on ? 'hidden' : ''; }
+
+  document.querySelectorAll('[data-close]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if(btn.dataset.close === 'rec') closeRec(); else closeGame();
+    });
+  });
+
+  // =================================================================
+  // RECORDING: TTS reads the 3 propositions, matching shapes light up,
+  // black background + white subtitles, exported via MediaRecorder.
+  // =================================================================
+  var recEls = {
+    modal: document.getElementById('recModal'),
+    set: document.getElementById('recSet'),
+    ratio: document.getElementById('recRatio'),
+    voice: document.getElementById('recVoice'),
+    rate: document.getElementById('recRate'),
+    rateVal: document.getElementById('recRateVal'),
+    audio: document.getElementById('recAudio'),
+    therefore: document.getElementById('recTherefore'),
+    canvas: document.getElementById('recCanvas'),
+    status: document.getElementById('recStatus'),
+    preview: document.getElementById('recPreviewBtn'),
+    start: document.getElementById('recStartBtn'),
+    stop: document.getElementById('recStopBtn'),
+    result: document.getElementById('recResult'),
+    video: document.getElementById('recVideo'),
+    download: document.getElementById('recDownload')
+  };
+  var RATIOS = { '9:16':[720,1280], '16:9':[1280,720], '1:1':[1080,1080] };
+  var rec = { open:false, raf:0, st:null, busy:false, cancel:false, recorder:null, tracks:[], url:null };
+
+  function loadVoices(){
+    if(!('speechSynthesis' in window)){
+      recEls.voice.innerHTML = '<option value="">TTS 미지원 브라우저</option>';
+      return;
+    }
+    var all = speechSynthesis.getVoices();
+    var ko = all.filter(function(v){ return /^ko/i.test(v.lang); });
+    var list = ko.length ? ko : all;
+    var prev = recEls.voice.value;
+    recEls.voice.innerHTML = list.length
+      ? list.map(function(v){ return '<option value="' + v.name.replace(/"/g,'&quot;') + '">' + v.name + ' (' + v.lang + ')</option>'; }).join('')
+      : '<option value="">기본 음성</option>';
+    if(prev) recEls.voice.value = prev;
+  }
+  if('speechSynthesis' in window){
+    loadVoices();
+    speechSynthesis.addEventListener ? speechSynthesis.addEventListener('voiceschanged', loadVoices) : (speechSynthesis.onvoiceschanged = loadVoices);
+  }
+  function currentVoice(){
+    if(!('speechSynthesis' in window)) return null;
+    var name = recEls.voice.value;
+    return speechSynthesis.getVoices().filter(function(v){ return v.name === name; })[0] || null;
+  }
+  recEls.rate.addEventListener('input', function(){ recEls.rateVal.textContent = Number(recEls.rate.value).toFixed(2) + '×'; });
+  recEls.rateVal.textContent = '1.00×';
+
+  function makeSentence(r){
+    var segA = r.quant + ' ' + r.subj + r.particle;
+    var segB = r.pred + r.copula;
+    return { segA:segA, segB:segB, full:segA + ' ' + segB, subj:r.subj, pred:r.pred };
+  }
+
+  function recPrepare(){
+    var gi = parseInt(recEls.set.value, 10);
+    var g = resultByIndex(gi);
+    if(!g) return null;
+    var rows = currentGrouped[gi-1].rows;
+    var dims = RATIOS[recEls.ratio.value] || RATIOS['9:16'];
+    var W = dims[0], H = dims[1], portrait = H > W;
+    recEls.canvas.width = W; recEls.canvas.height = H;
+    var top = H*.07, bottom = H*(portrait ? .6 : .64);
+    var frames = buildFramesFit(g, W/2, (top + bottom)/2, W, bottom - top, .82);
+    var R = frames[0].r;
+    rec.st = {
+      g:g, frames:frames, W:W, H:H, portrait:portrait,
+      unit: Math.max(1, R/78*.62), fontPx: clamp(R*.13, 14, 48),
+      sentences: rows.map(makeSentence),
+      cur:-1, seg:-1, word:null, phase:'idle', t0:performance.now()/1000
+    };
+    rec.ctx = recEls.canvas.getContext('2d');
+    return rec.st;
+  }
+
+  function kickFrames(st, word){
+    var u = st.unit;
+    st.frames.forEach(function(f){
+      if(f.word === word){ f.vy -= 2.2*u; f.vx += (Math.random() - .5)*2*u; }
+    });
+  }
+
+  function drawRecSubtitle(ctx, st){
+    var W = st.W, H = st.H;
+    var fs = Math.round(Math.min(W, H) * (st.portrait ? .062 : .058));
+    var sy = H * (st.portrait ? .74 : .82);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    function fontAt(px){ return '700 ' + px + 'px "IBM Plex Sans KR", sans-serif'; }
+
+    if(st.phase === 'outro'){
+      var sm = Math.round(fs*.62), gap = sm*1.55;
+      st.sentences.forEach(function(s, i){
+        var txt = (i === 2 ? '∴ ' : '') + s.full, px = sm;
+        while(px > 12 && measureText(txt, px, 700) > W*.9) px -= 1;
+        ctx.font = fontAt(px);
+        ctx.shadowColor = 'rgba(255,255,255,0.5)'; ctx.shadowBlur = i === 2 ? 14 : 0;
+        ctx.fillStyle = i === 2 ? '#ffffff' : 'rgba(255,255,255,0.62)';
+        ctx.fillText(txt, W/2, sy + (i - 1)*gap);
+      });
+      ctx.shadowBlur = 0;
+      return;
+    }
+    var s = st.sentences[st.cur];
+    if(!s) return;
+    var tag = ['전제 1', '전제 2', '결론'][st.cur] || '';
+    var px = fs;
+    var oneLine = measureText(s.full, px, 700) <= W*.9;
+    var lines = oneLine ? [[s.segA, 0, s.segB, 1]] : [[s.segA, 0], [s.segB, 1]];
+    if(!oneLine){
+      while(px > 14 && Math.max(measureText(s.segA, px, 700), measureText(s.segB, px, 700)) > W*.9) px -= 1;
+    }
+    var lh = px*1.3;
+    var y0 = sy - (lines.length - 1)*lh/2;
+    ctx.font = '500 ' + Math.round(px*.46) + 'px "IBM Plex Mono", monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillText(tag, W/2, y0 - px*1.05);
+    ctx.font = fontAt(px);
+    function segStyle(idx){
+      var active = st.seg === idx;
+      ctx.fillStyle = (st.seg === -1) ? 'rgba(255,255,255,0.85)' : (active ? '#ffffff' : 'rgba(255,255,255,0.5)');
+      ctx.shadowColor = 'rgba(255,255,255,0.75)';
+      ctx.shadowBlur = active ? 18 : 0;
+    }
+    lines.forEach(function(line, li){
+      var y = y0 + li*lh;
+      if(line.length === 4){
+        var wa = measureText(line[0], px, 700), sp = measureText(' ', px, 700), wb = measureText(line[2], px, 700);
+        var x0 = W/2 - (wa + sp + wb)/2;
+        ctx.textAlign = 'left';
+        segStyle(0); ctx.fillText(line[0], x0, y);
+        segStyle(1); ctx.fillText(line[2], x0 + wa + sp, y);
+        ctx.textAlign = 'center';
+      } else {
+        segStyle(line[1]); ctx.fillText(line[0], W/2, y);
+      }
+    });
+    ctx.shadowBlur = 0;
+  }
+
+  function recLoop(){
+    if(!rec.open) return;
+    var st = rec.st, ctx = rec.ctx;
+    if(st && ctx){
+      var now = performance.now()/1000;
+      st.frames.forEach(function(f){
+        var tg = (st.word && f.word === st.word) ? 1 : 0;
+        f.boostV = (f.boostV || 0) + (tg - (f.boostV || 0))*.18;
+      });
+      physicsTick(st.frames, null, null, { w:st.W, h:st.H }, HOME_K);
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, st.W, st.H);
+      drawFrameSet(ctx, st.frames, now*FX.speed, {
+        effect: st.phase === 'outro' ? 'pulse' : FX.diagram,
+        unit: st.unit, fontPx: st.fontPx, blurScale: 1.4,
+        alpha: Math.min(1, (now - st.t0)/.7),
+        intensityMul: st.phase === 'outro' ? 1.15 : (st.word ? .55 : .85),
+        boost: function(f){ return f.boostV || 0; }
+      });
+      drawRecSubtitle(ctx, st);
+    }
+    rec.raf = requestAnimationFrame(recLoop);
+  }
+
+  function recWait(ms){
+    return new Promise(function(res, rej){
+      var start = performance.now();
+      (function tick(){
+        if(rec.cancel) return rej(new Error('cancel'));
+        if(performance.now() - start >= ms) return res();
+        setTimeout(tick, 30);
+      })();
+    });
+  }
+  function recSpeak(text, silent){
+    return new Promise(function(res, rej){
+      if(rec.cancel) return rej(new Error('cancel'));
+      var rate = parseFloat(recEls.rate.value) || 1;
+      if(silent || !('speechSynthesis' in window)){
+        setTimeout(res, (350 + text.length*170)/rate);
+        return;
+      }
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ko-KR'; u.rate = rate;
+      var v = currentVoice(); if(v) u.voice = v;
+      var done = false;
+      var fin = function(){ if(done) return; done = true; clearTimeout(to); res(); };
+      u.onend = fin; u.onerror = fin;
+      var to = setTimeout(fin, 2500 + text.length*350/rate);
+      speechSynthesis.speak(u);
+    });
+  }
+
+  async function recTimeline(st, silent){
+    st.t0 = performance.now()/1000;
+    st.phase = 'intro';
+    await recWait(900);
+    st.phase = 'read';
+    for(var i=0; i<st.sentences.length; i++){
+      var s = st.sentences[i];
+      st.cur = i; st.seg = -1; st.word = null;
+      await recWait(280);
+      if(i === 2 && recEls.therefore.checked){ await recSpeak('그러므로', silent); await recWait(120); }
+      st.seg = 0; st.word = s.subj; kickFrames(st, s.subj);
+      await recSpeak(s.segA, silent);
+      await recWait(90);
+      st.seg = 1; st.word = s.pred; kickFrames(st, s.pred);
+      await recSpeak(s.segB, silent);
+      st.word = null;
+      await recWait(700);
+    }
+    st.cur = -1; st.seg = -1; st.phase = 'outro';
+    await recWait(2600);
+  }
+
+  function pickMime(withAudio){
+    var c = withAudio
+      ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4;codecs=avc1,mp4a','video/mp4;codecs=h264,aac','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
+      : ['video/mp4;codecs=avc1.42E01E','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+    if(!window.MediaRecorder) return null;
+    for(var i=0;i<c.length;i++){ if(MediaRecorder.isTypeSupported(c[i])) return c[i]; }
+    return '';
+  }
+
+  function setRecBusy(on){
+    rec.busy = on;
+    recEls.preview.disabled = on; recEls.start.disabled = on; recEls.stop.disabled = !on;
+    [recEls.set, recEls.ratio, recEls.voice, recEls.audio].forEach(function(el){ el.disabled = on; });
+  }
+
+  async function runPreview(){
+    if(rec.busy) return;
+    if(!recPrepare()) return;
+    rec.cancel = false; setRecBusy(true);
+    recEls.status.textContent = '미리보기 재생 중…';
+    if('speechSynthesis' in window) speechSynthesis.cancel();
+    try{ await recTimeline(rec.st, recEls.audio.value === 'silent'); recEls.status.textContent = '미리보기 끝. 마음에 들면 ● 녹화 시작을 누르세요.'; }
+    catch(e){ recEls.status.textContent = '중지했습니다.'; }
+    setRecBusy(false);
+  }
+
+  async function runRecording(){
+    if(rec.busy) return;
+    if(!window.MediaRecorder || !recEls.canvas.captureStream){ alert('이 브라우저는 캔버스 녹화를 지원하지 않습니다. 최신 Chrome/Edge를 사용해 주세요.'); return; }
+    if(!recPrepare()) return;
+    var silent = recEls.audio.value === 'silent';
+    var audioTracks = [], display = null;
+    rec.cancel = false;
+    setRecBusy(true);
+    recEls.result.classList.add('hidden');
+    if(!silent){
+      recEls.status.textContent = '화면 공유 창에서 ‘이 탭’과 ‘탭 오디오 공유’를 선택해 주세요…';
+      try{
+        display = await navigator.mediaDevices.getDisplayMedia({
+          video:true,
+          audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false },
+          preferCurrentTab:true, selfBrowserSurface:'include', systemAudio:'include'
+        });
+        audioTracks = display.getAudioTracks();
+        if(!audioTracks.length && !confirm('오디오가 공유되지 않았습니다(‘오디오 공유’ 체크 필요). 음성 없이 녹화를 계속할까요?')){
+          display.getTracks().forEach(function(t){ t.stop(); });
+          setRecBusy(false); recEls.status.textContent = ''; return;
+        }
+      }catch(err){
+        if(!confirm('화면/오디오 공유가 취소되었습니다. 음성 없이(영상만) 녹화할까요?')){ setRecBusy(false); recEls.status.textContent = ''; return; }
+      }
+    }
+    var vstream = recEls.canvas.captureStream(30);
+    var mixed = new MediaStream(vstream.getVideoTracks().concat(audioTracks));
+    var mime = pickMime(audioTracks.length > 0);
+    var recorder;
+    try{
+      recorder = mime ? new MediaRecorder(mixed, { mimeType:mime, videoBitsPerSecond:8000000 }) : new MediaRecorder(mixed);
+    }catch(err){
+      recorder = new MediaRecorder(mixed);
+    }
+    rec.recorder = recorder;
+    rec.tracks = vstream.getTracks().concat(display ? display.getTracks() : []);
+    var chunks = [];
+    recorder.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
+    var stopped = new Promise(function(r){ recorder.onstop = r; });
+    if('speechSynthesis' in window) speechSynthesis.cancel();
+    recorder.start(200);
+    recEls.status.textContent = '● 녹화 중… (이 탭을 계속 띄워 두세요)';
+    var cancelled = false;
+    try{ await recTimeline(rec.st, silent || audioTracks.length === 0); }
+    catch(e){ cancelled = true; }
+    try{ recorder.stop(); }catch(e){}
+    await stopped;
+    rec.tracks.forEach(function(t){ try{ t.stop(); }catch(e){} });
+    rec.tracks = []; rec.recorder = null;
+    setRecBusy(false);
+    if(cancelled){ recEls.status.textContent = '녹화를 중지했습니다.'; return; }
+    var type = recorder.mimeType || mime || 'video/webm';
+    var blob = new Blob(chunks, { type:type });
+    var ext = /mp4/.test(type) ? 'mp4' : 'webm';
+    if(rec.url) URL.revokeObjectURL(rec.url);
+    rec.url = URL.createObjectURL(blob);
+    recEls.video.src = rec.url;
+    recEls.download.href = rec.url;
+    recEls.download.download = '삼단논법_세트' + rec.st.g.groupIndex + '.' + ext;
+    recEls.download.textContent = '⬇ ' + ext.toUpperCase() + ' 다운로드 (' + (blob.size/1048576).toFixed(1) + 'MB)';
+    recEls.result.classList.remove('hidden');
+    recEls.status.textContent = ext === 'mp4'
+      ? '완료! MP4로 저장되었습니다.' + (audioTracks.length ? '' : ' (음성 없음)')
+      : '완료! 이 브라우저는 MP4 직접 녹화를 지원하지 않아 WebM으로 저장했습니다. 최신 Chrome·Edge·Safari에서는 MP4로 저장됩니다.';
+  }
+
+  function openRec(){
+    if(!validResults().length){ alert('영상을 만들려면 올바른 삼단논법 세트가 하나 이상 있어야 합니다.'); return; }
+    fillSetSelect(recEls.set);
+    loadVoices();
+    recEls.modal.classList.remove('hidden');
+    lockScroll(true);
+    rec.open = true;
+    recEls.status.textContent = '';
+    recPrepare();
+    cancelAnimationFrame(rec.raf);
+    rec.raf = requestAnimationFrame(recLoop);
+  }
+  function closeRec(){
+    rec.cancel = true;
+    if('speechSynthesis' in window) speechSynthesis.cancel();
+    rec.open = false;
+    cancelAnimationFrame(rec.raf);
+    recEls.modal.classList.add('hidden');
+    lockScroll(false);
+  }
+  [recEls.set, recEls.ratio].forEach(function(el){ el.addEventListener('change', function(){ if(!rec.busy) recPrepare(); }); });
+  recEls.preview.addEventListener('click', runPreview);
+  recEls.start.addEventListener('click', runRecording);
+  recEls.stop.addEventListener('click', function(){ rec.cancel = true; if('speechSynthesis' in window) speechSynthesis.cancel(); });
+  document.getElementById('recBtn').addEventListener('click', openRec);
+
+  // =================================================================
+  // GAME: 집합 캐처 (Set Catcher)
+  // The diagram is a jelly-like body you steer. Concept orbs fly in on
+  // curved paths. An orb whose word matches a shape:
+  //   - same polarity (사람 → 사람 도형) = must be caught inside it
+  //   - opposite polarity (사람× → 사람 도형) = contradiction, avoid it!
+  // =================================================================
+  var gameEls = {
+    modal: document.getElementById('gameModal'),
+    set: document.getElementById('gameSet'),
+    stage: document.getElementById('gameStage'),
+    canvas: document.getElementById('gameCanvas'),
+    overlay: document.getElementById('gameOverlay'),
+    score: document.getElementById('hudScore'),
+    combo: document.getElementById('hudCombo'),
+    level: document.getElementById('hudLevel'),
+    lives: document.getElementById('hudLives'),
+    energy: document.getElementById('hudEnergy'),
+    best: document.getElementById('hudBest')
+  };
+  var game = null;
+
+  function getBest(){ try{ return parseInt(localStorage.getItem('syllo_game_best') || '0', 10) || 0; }catch(e){ return 0; } }
+  function setBest(v){ try{ localStorage.setItem('syllo_game_best', String(v)); }catch(e){} }
+
+  function setupGameCanvas(){
+    var r = gameEls.stage.getBoundingClientRect();
+    game.dpr = window.devicePixelRatio || 1;
+    game.w = Math.max(200, r.width); game.h = Math.max(200, r.height);
+    gameEls.canvas.width = Math.round(game.w*game.dpr);
+    gameEls.canvas.height = Math.round(game.h*game.dpr);
+  }
+
+  function initGame(play){
+    setupGameCanvas();
+    var gr = resultByIndex(parseInt(gameEls.set.value, 10));
+    if(!gr) return;
+    var frames = buildFramesFit(gr, game.w/2, game.h/2, game.w, game.h, .52);
+    var root = frames[0], R = root.r, bb = frameBBox(root);
+    Object.assign(game, {
+      gr:gr, frames:frames,
+      unit: Math.max(1, R/78*.6), fontPx: clamp(R*.11, 13, 26),
+      rootBB: { x0:bb.x0 - root.x, x1:bb.x1 - root.x, y0:bb.y0 - root.y, y1:bb.y1 - root.y },
+      rootOff: { x:(bb.x0 + bb.x1)/2 - root.x, y:(bb.y0 + bb.y1)/2 - root.y },
+      target: { x:root.x, y:root.y },
+      orbs:[], parts:[], rings:[], texts:[], pulses:[],
+      score:0, combo:0, lives:3, energy:100, level:1, time:0, spawnT:1.0, shake:0,
+      state: play ? 'play' : 'idle', best:getBest()
+    });
+    game.bg = [];
+    for(var i=0;i<110;i++) game.bg.push({ x:Math.random()*game.w, y:Math.random()*game.h, s:.5 + Math.random()*1.4 });
+    frames.forEach(function(f){ f.hurt = 0; });
+    updateHud();
+    renderGameOverlay();
+  }
+
+  function renderGameOverlay(){
+    if(game.state === 'play'){ gameEls.overlay.innerHTML = ''; return; }
+    var words = game.frames.map(function(f){ return '<b>' + f.label + '</b>'; }).join(' ⊃ ');
+    if(game.state === 'over'){
+      gameEls.overlay.innerHTML =
+        '<div class="game-card"><h2>게임 오버</h2><div class="big">' + game.score + '</div>' +
+        '<p>최고 기록 <b>' + game.best + '</b> · 레벨 ' + game.level + '</p>' +
+        '<div class="actions"><button class="btn btn-primary" data-act="start">다시 하기 (Space)</button></div></div>';
+    } else {
+      gameEls.overlay.innerHTML =
+        '<div class="game-card"><h2>🎮 집합 캐처</h2>' +
+        '<p>도형은 집합입니다: ' + words + '</p>' +
+        '<ul>' +
+        '<li>날아오는 <b>개념 구슬</b>을 이름이 같은 도형 <b>안으로</b> 받아내면 득점 (예: 사람 → 사람 도형). 안쪽 도형은 바깥 도형에도 속하니 관계를 생각하세요.</li>' +
+        '<li>극성이 반대인 구슬(사람× → 사람 도형, 사람 → 사람× 도형)은 <b>모순</b>! 그 도형에 닿으면 생명 −1.</li>' +
+        '<li>받아야 할 구슬을 놓치면 에너지가 줄어듭니다. 생명이나 에너지가 0이면 끝.</li>' +
+        '<li>조작: 마우스 이동 / 화면 드래그 / 방향키·WASD. 도형은 젤리처럼 출렁입니다.</li>' +
+        '</ul>' +
+        '<div class="actions"><button class="btn btn-primary" data-act="start">시작 (Space)</button></div></div>';
+    }
+  }
+  gameEls.overlay.addEventListener('click', function(e){
+    var b = e.target.closest('[data-act="start"]'); if(b) startGame();
+  });
+  gameEls.set.addEventListener('change', function(){ if(game) initGame(false); });
+
+  function startGame(){ initGame(true); game.last = null; }
+
+  function updateHud(){
+    gameEls.score.textContent = game.score;
+    gameEls.combo.textContent = game.combo;
+    gameEls.level.textContent = game.level;
+    gameEls.lives.textContent = '♥'.repeat(Math.max(0, game.lives)) + '♡'.repeat(Math.max(0, 3 - game.lives));
+    gameEls.energy.style.width = Math.max(0, game.energy) + '%';
+    gameEls.best.textContent = Math.max(game.best, game.score);
+  }
+
+  function clampTarget(){
+    var t = game.target, b = game.rootBB, m = 6;
+    var xmin = -b.x0 + m, xmax = game.w - b.x1 - m;
+    var ymin = -b.y0 + m, ymax = game.h - b.y1 - m;
+    t.x = xmin > xmax ? (xmin + xmax)/2 : clamp(t.x, xmin, xmax);
+    t.y = ymin > ymax ? (ymin + ymax)/2 : clamp(t.y, ymin, ymax);
+  }
+
+  function relation(o, f){ return o.word !== f.word ? 0 : (o.neg === f.neg ? 1 : -1); }
+
+  function spawnOrb(){
+    var W = game.w, H = game.h, frames = game.frames;
+    var f = frames[Math.floor(Math.random()*frames.length)];
+    var kind = Math.random() < .6 ? 'target' : 'forbid';
+    var neg = kind === 'target' ? f.neg : !f.neg;
+    var label = labelOf(f.word, neg);
+    var fp = clamp(game.fontPx*.85, 12, 20);
+    var r = Math.max(18, measureText(label, fp, 700)/2 + 9);
+    var side = Math.floor(Math.random()*4), x, y, pad = r + 10;
+    if(side === 0){ x = Math.random()*W; y = -pad; }
+    else if(side === 1){ x = W + pad; y = Math.random()*H; }
+    else if(side === 2){ x = Math.random()*W; y = H + pad; }
+    else { x = -pad; y = Math.random()*H; }
+    var ax = W/2 + (Math.random() - .5)*W*.6, ay = H/2 + (Math.random() - .5)*H*.6;
+    var speed = Math.min(W, H)*.16*(1 + .12*(game.level - 1))*(.8 + Math.random()*.4);
+    var d = Math.hypot(ax - x, ay - y) || 1;
+    var mr = Math.random();
+    game.orbs.push({
+      x:x, y:y, vx:(ax - x)/d*speed, vy:(ay - y)/d*speed, speed:speed, r:r, fontPx:fp,
+      word:f.word, neg:neg, label:label, kind:kind,
+      motion: mr < .4 ? 'line' : (mr < .75 ? 'sine' : 'curve'),
+      ph:Math.random()*TAU, w:2 + Math.random()*2, turn:(Math.random() < .5 ? -1 : 1)*(.3 + Math.random()*.4),
+      age:0, trail:[], spent:false, fade:1, dead:false
+    });
+  }
+
+  function burst(x, y, col, n, power){
+    for(var i=0;i<n;i++){
+      var a = Math.random()*TAU, sp = (60 + Math.random()*220)*power;
+      game.parts.push({ x:x, y:y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, life:1, decay:.9 + Math.random()*.9, r:1.5 + Math.random()*2.5, col:col });
+    }
+  }
+  function ring(x, y, col, maxR){ game.rings.push({ x:x, y:y, col:col, t:0, maxR:maxR }); }
+  function floatText(txt, x, y, col, size){ game.texts.push({ txt:txt, x:x, y:y, col:col, t:0, size:size || 18 }); }
+
+  function capture(o, f, idx){
+    o.dead = true;
+    game.combo++;
+    var pts = Math.round(10*game.level*(1 + Math.min(game.combo, 20)*.15));
+    game.score += pts;
+    game.energy = Math.min(100, game.energy + 6);
+    var col = f._lc || frameBaseHex(f);
+    burst(o.x, o.y, col, 26, 1);
+    burst(o.x, o.y, '#ffffff', 8, .6);
+    ring(o.x, o.y, col, f.r*.9);
+    game.pulses.push({ t0:game.time, origin:idx });
+    floatText('+' + pts + (game.combo > 1 ? '  ×' + game.combo : ''), o.x, o.y - o.r, '#ffffff', 18);
+    f.vx += o.vx/o.speed*1.6*game.unit;
+    f.vy += o.vy/o.speed*1.6*game.unit;
+  }
+  function contradiction(o, f, sd){
+    game.lives--; game.combo = 0; game.shake = 14; f.hurt = 1;
+    var n = sdNormal(f, o.x, o.y);
+    var dot = o.vx*n.x + o.vy*n.y;
+    if(dot < 0){ o.vx -= 2*dot*n.x; o.vy -= 2*dot*n.y; }
+    o.x += n.x*(o.r - sd + 2); o.y += n.y*(o.r - sd + 2);
+    o.spent = true; o.fade = 1;
+    burst(o.x, o.y, '#ff3b5c', 34, 1.1);
+    ring(o.x, o.y, '#ff3b5c', f.r*.7);
+    floatText('모순!', o.x, o.y - o.r, '#ff5470', 22);
+    f.vx -= n.x*4*game.unit; f.vy -= n.y*4*game.unit;
+  }
+
+  function gameUpdate(dt){
+    game.time += dt;
+    var k = game.keys || {}, sp = Math.min(game.w, game.h)*1.1*dt;
+    if(k.left) game.target.x -= sp;
+    if(k.right) game.target.x += sp;
+    if(k.up) game.target.y -= sp;
+    if(k.down) game.target.y += sp;
+    clampTarget();
+    var root = game.frames[0];
+    root.homeX = game.target.x; root.homeY = game.target.y;
+    physicsTick(game.frames, null, null, { w:game.w, h:game.h }, .12);
+
+    var lv = 1 + Math.floor(game.time/20);
+    if(lv > game.level){ game.level = lv; floatText('LEVEL ' + lv, game.w/2, game.h*.3, '#e8c468', 34); }
+
+    game.spawnT -= dt;
+    if(game.spawnT <= 0){
+      spawnOrb();
+      if(Math.random() < Math.min(.4, (game.level - 1)*.07)) spawnOrb();
+      game.spawnT = Math.max(.42, 1.5 - game.level*.11)*(.7 + Math.random()*.6);
+    }
+
+    var W = game.w, H = game.h;
+    game.orbs.forEach(function(o){
+      o.age += dt;
+      var s0 = Math.hypot(o.vx, o.vy) || 1, nx = -o.vy/s0, ny = o.vx/s0;
+      if(o.motion === 'sine'){
+        var a = o.speed*1.8*Math.cos(o.age*o.w + o.ph);
+        o.vx += nx*a*dt; o.vy += ny*a*dt;
+      } else if(o.motion === 'curve'){
+        var ang = o.turn*dt, c = Math.cos(ang), s = Math.sin(ang);
+        var vx = o.vx*c - o.vy*s; o.vy = o.vx*s + o.vy*c; o.vx = vx;
+      }
+      var s1 = Math.hypot(o.vx, o.vy) || 1;
+      o.vx *= o.speed/s1; o.vy *= o.speed/s1;
+      o.x += o.vx*dt; o.y += o.vy*dt;
+      o.trail.push({ x:o.x, y:o.y }); if(o.trail.length > 14) o.trail.shift();
+      if(o.spent){ o.fade -= dt*1.3; if(o.fade <= 0) o.dead = true; return; }
+      for(var i=game.frames.length-1; i>=0; i--){
+        var f = game.frames[i], rel = relation(o, f);
+        if(!rel) continue;
+        var sd = signedDist(f, o.x, o.y);
+        if(rel === 1 && sd < -Math.min(o.r*.35, f.r*.25)){ capture(o, f, i); return; }
+        if(rel === -1 && sd < o.r){ contradiction(o, f, sd); return; }
+      }
+      if(o.age > .6){
+        var m = o.r + 40;
+        var out = o.x < -m || o.x > W + m || o.y < -m || o.y > H + m;
+        if(out || o.age > 16){
+          o.dead = true;
+          if(o.kind === 'target'){
+            game.combo = 0; game.energy -= 18;
+            floatText('놓침', clamp(o.x, 40, W - 40), clamp(o.y, 30, H - 30), '#a9b6b4', 16);
+          } else {
+            game.score += 2*game.level;
+          }
+        }
+      }
+    });
+    game.orbs = game.orbs.filter(function(o){ return !o.dead; });
+    commonFxUpdate(dt);
+    if(game.lives <= 0 || game.energy <= 0) gameOver();
+    updateHud();
+  }
+
+  function idleUpdate(dt){
+    game.time += dt;
+    var root = game.frames[0];
+    game.target.x = game.w/2 - game.rootOff.x + Math.sin(game.time*.7)*game.w*.12;
+    game.target.y = game.h/2 - game.rootOff.y + Math.sin(game.time*1.1)*game.h*.08;
+    clampTarget();
+    root.homeX = game.target.x; root.homeY = game.target.y;
+    physicsTick(game.frames, null, null, { w:game.w, h:game.h }, .08);
+    commonFxUpdate(dt);
+  }
+
+  function commonFxUpdate(dt){
+    game.parts.forEach(function(p){
+      p.vx *= Math.pow(.04, dt); p.vy *= Math.pow(.04, dt);
+      p.x += p.vx*dt; p.y += p.vy*dt; p.life -= p.decay*dt;
+    });
+    game.parts = game.parts.filter(function(p){ return p.life > 0; });
+    game.rings.forEach(function(r){ r.t += dt*1.6; });
+    game.rings = game.rings.filter(function(r){ return r.t < 1; });
+    game.texts.forEach(function(t){ t.t += dt*.9; t.y -= 34*dt; });
+    game.texts = game.texts.filter(function(t){ return t.t < 1; });
+    game.pulses = game.pulses.filter(function(p){ return game.time - p.t0 < 1.5; });
+    game.frames.forEach(function(f){ f.hurt = (f.hurt || 0)*Math.pow(.05, dt); });
+    game.shake *= Math.pow(.02, dt);
+    game.bg.forEach(function(b){
+      var a = Math.sin(b.x*.006 + game.time*.3) + Math.cos(b.y*.005 - game.time*.2);
+      b.x += Math.cos(a*Math.PI)*18*b.s*dt;
+      b.y += Math.sin(a*Math.PI)*18*b.s*dt;
+      if(b.x < 0) b.x += game.w; if(b.x > game.w) b.x -= game.w;
+      if(b.y < 0) b.y += game.h; if(b.y > game.h) b.y -= game.h;
+    });
+  }
+
+  function gameOver(){
+    game.state = 'over';
+    if(game.score > game.best){ game.best = game.score; setBest(game.score); }
+    updateHud();
+    renderGameOverlay();
+  }
+
+  function gameDraw(){
+    var ctx = gameEls.canvas.getContext('2d'), d = game.dpr, W = game.w, H = game.h;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.fillStyle = '#03060a'; ctx.fillRect(0, 0, W, H);
+    var c = shapeCenter(game.frames[game.frames.length - 1]);
+    var bg = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, Math.max(W, H)*.7);
+    bg.addColorStop(0, 'rgba(127,179,213,0.10)'); bg.addColorStop(1, 'rgba(127,179,213,0)');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(169,200,220,0.35)';
+    game.bg.forEach(function(b){ ctx.fillRect(b.x, b.y, b.s, b.s); });
+
+    ctx.save();
+    if(game.shake > .3) ctx.translate((Math.random() - .5)*game.shake, (Math.random() - .5)*game.shake);
+
+    drawFrameSet(ctx, game.frames, game.time*FX.speed, {
+      unit: game.unit, fontPx: game.fontPx, blurScale: d,
+      boost: function(f, i){
+        var b = 0;
+        game.pulses.forEach(function(p){
+          var dt = game.time - p.t0 - Math.abs(i - p.origin)*.09;
+          b += Math.exp(-Math.pow(dt/.08, 2));
+        });
+        return Math.min(1.5, b + (f.hurt || 0)*.8);
+      },
+      lightOverride: function(f){ return (f.hurt || 0) > .08 && fract(game.time*14) < .6 ? '#ff2a4a' : null; }
+    });
+
+    // orbs
+    game.orbs.forEach(function(o){
+      var col = o.neg ? '#e08585' : '#e8c468';
+      var fade = o.spent ? Math.max(0, o.fade) : 1;
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for(var j=0;j<o.trail.length;j++){
+        var p = o.trail[j], a = j/o.trail.length;
+        glowDot(ctx, p.x, p.y, o.r*.35*a, col, a*.45*fade, 0);
+      }
+      ctx.restore();
+      drawSphere(ctx, o.x, o.y, o.r, col, {
+        glow:.8, glowColor:col, blur:16*d, alpha:fade,
+        text:o.label, textColor:o.neg ? '#2a0c0c' : '#1b1503', fontPx:o.fontPx
+      });
+    });
+
+    // particles, rings, floating texts
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    game.parts.forEach(function(p){ glowDot(ctx, p.x, p.y, p.r*Math.max(.2, p.life), p.col, p.life, 8*d); });
+    ctx.shadowBlur = 0;
+    game.rings.forEach(function(r){
+      ctx.beginPath(); ctx.arc(r.x, r.y, Math.max(.1, r.maxR*r.t), 0, TAU);
+      ctx.lineWidth = 3*(1 - r.t) + .5;
+      ctx.strokeStyle = rgba(r.col, 1 - r.t);
+      ctx.shadowColor = r.col; ctx.shadowBlur = 14*d;
+      ctx.stroke();
+    });
+    ctx.restore();
+    game.texts.forEach(function(t){
+      ctx.save();
+      ctx.globalAlpha = 1 - t.t;
+      ctx.font = '700 ' + t.size + 'px "Space Grotesk", "IBM Plex Sans KR", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = t.col; ctx.shadowBlur = 12*d;
+      ctx.fillStyle = t.col;
+      ctx.fillText(t.txt, t.x, t.y);
+      ctx.restore();
+    });
+    ctx.restore();
+  }
+
+  function gameLoop(ts){
+    if(!game || !game.open) return;
+    var now = ts/1000;
+    var dt = game.last == null ? 1/60 : Math.min(.033, Math.max(0, now - game.last));
+    game.last = now;
+    if(game.state === 'play') gameUpdate(dt); else idleUpdate(dt);
+    gameDraw();
+    game.raf = requestAnimationFrame(gameLoop);
+  }
+
+  function pointerToTarget(e){
+    var r = gameEls.canvas.getBoundingClientRect();
+    game.target.x = e.clientX - r.left - game.rootOff.x;
+    game.target.y = e.clientY - r.top - game.rootOff.y;
+  }
+  gameEls.canvas.addEventListener('pointerdown', function(e){
+    if(!game || game.state !== 'play') return;
+    game.pDown = true; gameEls.canvas.setPointerCapture(e.pointerId); pointerToTarget(e);
+  });
+  gameEls.canvas.addEventListener('pointermove', function(e){
+    if(!game || game.state !== 'play') return;
+    if(e.pointerType === 'mouse' || game.pDown) pointerToTarget(e);
+  });
+  ['pointerup','pointercancel'].forEach(function(ev){
+    gameEls.canvas.addEventListener(ev, function(){ if(game) game.pDown = false; });
+  });
+  var KEYMAP = { ArrowLeft:'left', a:'left', A:'left', ArrowRight:'right', d:'right', D:'right', ArrowUp:'up', w:'up', W:'up', ArrowDown:'down', s:'down', S:'down' };
+  window.addEventListener('keydown', function(e){
+    if(!game || !game.open) return;
+    if(KEYMAP[e.key]){ game.keys[KEYMAP[e.key]] = true; e.preventDefault(); }
+    if((e.key === ' ' || e.key === 'Enter') && game.state !== 'play'){ e.preventDefault(); startGame(); }
+    if(e.key === 'Escape') closeGame();
+  });
+  window.addEventListener('keyup', function(e){
+    if(game && KEYMAP[e.key]) game.keys[KEYMAP[e.key]] = false;
+  });
+  window.addEventListener('resize', function(){
+    if(game && game.open){ setupGameCanvas(); clampTarget(); }
+  });
+
+  function openGame(){
+    if(!validResults().length){ alert('게임을 하려면 올바른 삼단논법 세트가 하나 이상 있어야 합니다.'); return; }
+    fillSetSelect(gameEls.set);
+    gameEls.modal.classList.remove('hidden');
+    lockScroll(true);
+    game = { open:true, keys:{}, last:null };
+    initGame(false);
+    game.raf = requestAnimationFrame(gameLoop);
+  }
+  function closeGame(){
+    if(!game) return;
+    game.open = false;
+    cancelAnimationFrame(game.raf);
+    gameEls.modal.classList.add('hidden');
+    lockScroll(false);
+  }
+  document.getElementById('gameBtn').addEventListener('click', openGame);
+
+})();
+</script>
+</body>
+</html>
