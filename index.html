@@ -662,14 +662,18 @@
       ctx.strokeStyle = 'rgba(255,255,255,0.85)';
       ctx.beginPath(); ctx.arc(x, y, r + 4, 0, TAU); ctx.stroke();
     }
-    if(o.text){
-      var fp = o.fontPx || 15;
+    var tLines = o.lines && o.lines.length ? o.lines : (o.text ? [o.text] : []);
+    if(tLines.length){
+      var fp = o.fontPx || 15, lh = fp*1.25;
       ctx.font = '700 ' + fp + 'px "IBM Plex Sans KR", sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.fillText(o.text, x, y + 1.2);
-      ctx.fillStyle = o.textColor || '#14181a';
-      ctx.fillText(o.text, x, y);
+      tLines.forEach(function(ln, li){
+        var ly = y + (li - (tLines.length - 1)/2)*lh;
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillText(ln, x, ly + 1.2);
+        ctx.fillStyle = o.textColor || '#14181a';
+        ctx.fillText(ln, x, ly);
+      });
     }
     ctx.restore();
   }
@@ -794,7 +798,43 @@
   var CONTRADICTION_COLOR = '#111111';
   var CONTRADICTION_LIGHT = '#ff4d6d';
   var NODE_FONT_PX = 15;
-  var NEG_NODE_R = 15;
+  var NEG_NODE_R = 17;
+  var NEG_OVERLAP = 0.5;      // fraction of the X circle's radius that overlaps the term circle
+  var X_COLOR = '#e5484d';
+
+  // Nodes with 3+ words break lines between words (centered) so the text fits inside the circle.
+  function layoutNodeText(text){
+    var px = NODE_FONT_PX, lh = px*1.25;
+    var words = String(text).split(/\s+/).filter(Boolean);
+    if(words.length < 3){
+      return { lines:[text], r:Math.max(24, measureText(text, px, 700)/2 + 14) };
+    }
+    function need(lines){
+      var n = lines.length, R = 0;
+      lines.forEach(function(ln, i){
+        var w = measureText(ln, px, 700), y = Math.abs(i - (n-1)/2)*lh + lh/2;
+        R = Math.max(R, Math.hypot(w/2, y));
+      });
+      return R;
+    }
+    var best = null, bestR = Infinity, n = words.length;
+    if(n <= 12){
+      for(var mask = 1; mask < (1 << (n-1)); mask++){      // at least one break
+        var lines = [], cur = words[0];
+        for(var i = 1; i < n; i++){
+          if(mask & (1 << (i-1))){ lines.push(cur); cur = words[i]; } else cur += ' ' + words[i];
+        }
+        lines.push(cur);
+        var R = need(lines);
+        if(R < bestR - 0.01 || (Math.abs(R - bestR) <= 0.01 && best && lines.length < best.length)){ bestR = R; best = lines; }
+      }
+    } else {
+      var per = 3; best = [];
+      for(var j = 0; j < n; j += per) best.push(words.slice(j, j + per).join(' '));
+      bestR = need(best);
+    }
+    return { lines:best, r:Math.max(26, bestR + 10) };
+  }
 
   function buildGraphAndTriples(groupedRaw){
     var rawByGroup = [];
@@ -871,16 +911,10 @@
 
     var labelSet = {};
     nodes.forEach(function(n){ labelSet[n._label] = n.id; });
-    var pairs = [];
+    var pairs = [], extraNodes = [];
     var TRANSPARENT = 'rgba(0,0,0,0)';
-    nodes.forEach(function(n){
-      var neg = n._label.indexOf('×') !== -1;
-      var baseLabel = n._label.replace('×','');
-      var baseId = neg ? labelSet[baseLabel] : null;
-      var paired = neg && baseId !== undefined && baseId !== null;
-      var text = paired ? '×' : n._label;
-      var r = paired ? NEG_NODE_R : Math.max(24, measureText(text, NODE_FONT_PX, 700)/2 + 14);
-      nodeInfo[n.id] = { label:n._label, text:text, neg:neg, paired:paired, r:r };
+    var nextId = nodes.length + 1;
+    function styleHit(n, r){
       n.shape = 'dot';
       n.size = r;
       n.borderWidth = 0;
@@ -889,11 +923,43 @@
       n.font = { size:0 };
       n.color = { background:TRANSPARENT, border:TRANSPARENT,
         highlight:{ background:TRANSPARENT, border:TRANSPARENT }, hover:{ background:TRANSPARENT, border:TRANSPARENT } };
-      if(paired){
+    }
+    nodes.slice().forEach(function(n){
+      var neg = n._label.indexOf('×') !== -1;
+      if(!neg){
+        var tl = layoutNodeText(n._label);
+        nodeInfo[n.id] = { label:n._label, text:n._label, lines:tl.lines, kind:'plain', neg:false, r:tl.r };
+        styleHit(n, tl.r);
+        return;
+      }
+      var baseLabel = n._label.replace('×','');
+      var baseId = labelSet[baseLabel];
+      // the negation is always an "X" circle (this node: edges point at it)
+      nodeInfo[n.id] = { label:n._label, text:'×', lines:null, kind:'x', neg:true, r:NEG_NODE_R };
+      styleHit(n, NEG_NODE_R);
+      if(baseId !== undefined && baseId !== null){
+        // the plain term exists as its own node: the X circle clings to it
         n.physics = false;
-        pairs.push({ baseId:baseId, negId:n.id, dragNeg:false });
+        pairs.push({ baseId:baseId, negId:n.id, driver:'base', dragF:false, theta:null, xNbrs:[], bNbrs:[] });
+      } else {
+        // no plain node: add a term circle that is only a visual partner of the X circle
+        var bl = layoutNodeText(baseLabel);
+        var sid = nextId++;
+        var sn = { id:sid, _label:baseLabel, physics:false };
+        nodeInfo[sid] = { label:baseLabel, text:baseLabel, lines:bl.lines, kind:'plain', neg:false, r:bl.r, synthetic:true };
+        styleHit(sn, bl.r);
+        extraNodes.push(sn);
+        pairs.push({ baseId:sid, negId:n.id, driver:'neg', dragF:false, theta:null, xNbrs:[], bNbrs:[] });
       }
     });
+
+    // Edge rest length grows with node size so big circles never hide arrows.
+    var partnerOf = {};
+    pairs.forEach(function(p){ partnerOf[p.baseId] = p.negId; partnerOf[p.negId] = p.baseId; });
+    function effR(id){
+      var r = nodeInfo[id].r, q = partnerOf[id];
+      return q ? r + nodeInfo[q].r*1.3 : r;
+    }
 
     var visEdges = mergedEdges.map(function(e){
       var color, contra = !!contradictionIds[e.id];
@@ -906,6 +972,7 @@
         color:{ color:color, highlight:color, hover:color, opacity: contra ? 1 : .6 },
         width: contra ? 3 : 2,
         smooth:{ type:'continuous' },
+        length: Math.max(140, effR(nodeMap.get(e.fromLabel)) + effR(nodeMap.get(e.toLabel)) + 90),
         _base: color, _contra: contra };
     });
 
@@ -918,7 +985,17 @@
         premiseEdgeIds:[ids[0], ids[1]], conclusionEdgeId:ids[2], midHidden:false, conclHidden:false });
     });
 
-    return { nodes:nodes, edges:visEdges, triples:triples, pairs:pairs, mergedEdges:mergedEdges, nodeInfo:nodeInfo };
+    var adj = {};
+    visEdges.forEach(function(e){
+      (adj[e.from] = adj[e.from] || []).push(e.to);
+      (adj[e.to] = adj[e.to] || []).push(e.from);
+    });
+    pairs.forEach(function(p){
+      p.xNbrs = (adj[p.negId] || []).filter(function(id){ return id !== p.baseId && id !== p.negId; });
+      p.bNbrs = (adj[p.baseId] || []).filter(function(id){ return id !== p.baseId && id !== p.negId; });
+    });
+
+    return { nodes:nodes, drawNodes:nodes.concat(extraNodes), edges:visEdges, triples:triples, pairs:pairs, mergedEdges:mergedEdges, nodeInfo:nodeInfo };
   }
 
   // ---------------------------------------------------------------
@@ -2191,7 +2268,7 @@
     nodes:{ shape:'dot' },
     edges:{ arrows:{ to:{ enabled:true, scaleFactor:0.7 } }, smooth:{ type:'continuous' } },
     physics:{ enabled:true, solver:'forceAtlas2Based',
-      forceAtlas2Based:{ gravitationalConstant:-80, springLength:140, springConstant:0.06, avoidOverlap:0.7 },
+      forceAtlas2Based:{ gravitationalConstant:-80, springLength:140, springConstant:0.06, avoidOverlap:1 },
       stabilization:{ iterations:180 } },
     interaction:{ dragNodes:true, dragView:true, zoomView:true, hover:true }
   };
@@ -2318,11 +2395,12 @@
     var bs = network.getScale() * (window.devicePixelRatio || 1);
     var bodyN = network.body.nodes;
     var sel = network.getSelectedNodes();
-    var order = B.nodes.slice().sort(function(a, b){ return (B.nodeInfo[a.id].paired ? 1 : 0) - (B.nodeInfo[b.id].paired ? 1 : 0); });
+    var order = B.drawNodes.slice().sort(function(a, b){ return (B.nodeInfo[a.id].kind === 'x' ? 1 : 0) - (B.nodeInfo[b.id].kind === 'x' ? 1 : 0); });
     order.forEach(function(n){
       var bn = bodyN[n.id]; if(!bn || bn.options.hidden) return;
       var info = B.nodeInfo[n.id];
-      var base = info.neg ? '#e08585' : '#e8c468';
+      var isX = info.kind === 'x';
+      var base = isX ? X_COLOR : '#e8c468';
       var lc = FX.colorMode === 'single' ? FX.color : (FX.colorMode === 'rainbow' ? hslHex(n.id*53 + t*50, 95, 62) : base);
       var glow;
       if(FX.graphNode === 'breathe') glow = .25 + .9*(.5 - .5*Math.cos(t*2 + n.id));
@@ -2333,8 +2411,8 @@
       if(isSel) glow += .5;
       drawSphere(ctx, bn.x, bn.y, info.r, base, {
         glow: glow*inten, glowColor: lc, blur: 22*bs,
-        text: info.text, textColor: info.neg ? '#2a0c0c' : '#1b1503',
-        fontPx: info.paired ? 16 : NODE_FONT_PX, selected: isSel
+        text: info.text, lines: info.lines, textColor: isX ? '#ffffff' : '#1b1503',
+        fontPx: isX ? 19 : NODE_FONT_PX, selected: isSel
       });
       if(FX.graphNode === 'orbit' || FX.graphNode === 'twinkle'){
         ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -2376,19 +2454,41 @@
     container.classList.remove('diagram-mode');
     container.innerHTML = '';
     var B = currentGraphBundle;
-    currentNodesDS = new vis.DataSet(B.nodes);
+    currentNodesDS = new vis.DataSet(B.drawNodes);
     currentEdgesDS = new vis.DataSet(B.edges);
     network = new vis.Network(container, { nodes:currentNodesDS, edges:currentEdgesDS }, graphOptions);
     hoverNodeId = null;
 
-    // Keep each "×" sphere glued to the right side of its plain term.
+    // Each negation = term circle + red X circle, slightly overlapping (like a molecule).
+    // The X circle turns to face the nodes its arrows connect to.
     network.on('beforeDrawing', function(){
       var bn = network.body.nodes;
       B.pairs.forEach(function(p){
         var b = bn[p.baseId], x = bn[p.negId]; if(!b || !x) return;
-        var off = B.nodeInfo[p.baseId].r + B.nodeInfo[p.negId].r + 3;
-        if(p.dragNeg){ b.x = x.x - off; b.y = x.y; }
-        else { x.x = b.x + off; x.y = b.y; }
+        var rx = B.nodeInfo[p.negId].r;
+        var off = B.nodeInfo[p.baseId].r + rx - rx*NEG_OVERLAP;
+        var cx = (b.x + x.x)/2, cy = (b.y + x.y)/2, vx = 0, vy = 0;
+        function acc(ids, w){
+          ids.forEach(function(id){
+            var q = bn[id]; if(!q || q.options.hidden) return;
+            var dx = q.x - cx, dy = q.y - cy, d = Math.hypot(dx, dy) || 1;
+            vx += w*dx/d; vy += w*dy/d;
+          });
+        }
+        acc(p.xNbrs, 1); acc(p.bNbrs, -.5);
+        if(Math.hypot(vx, vy) > .05){
+          var tgt = Math.atan2(vy, vx);
+          if(p.theta == null) p.theta = tgt;
+          else {
+            var d = tgt - p.theta;
+            while(d > Math.PI) d -= 2*Math.PI;
+            while(d < -Math.PI) d += 2*Math.PI;
+            p.theta += d*.18;
+          }
+        } else if(p.theta == null) p.theta = 0;
+        var ux = Math.cos(p.theta)*off, uy = Math.sin(p.theta)*off;
+        var moveX = (p.driver === 'base') ? !p.dragF : p.dragF;
+        if(moveX){ x.x = b.x + ux; x.y = b.y + uy; } else { b.x = x.x - ux; b.y = x.y - uy; }
       });
     });
     network.on('afterDrawing', function(ctx){
@@ -2396,9 +2496,11 @@
       drawGraphNodes(ctx);
     });
     network.on('dragStart', function(params){
-      B.pairs.forEach(function(p){ p.dragNeg = params.nodes.indexOf(p.negId) !== -1; });
+      B.pairs.forEach(function(p){
+        p.dragF = params.nodes.indexOf(p.driver === 'base' ? p.negId : p.baseId) !== -1;
+      });
     });
-    network.on('dragEnd', function(){ B.pairs.forEach(function(p){ p.dragNeg = false; }); });
+    network.on('dragEnd', function(){ B.pairs.forEach(function(p){ p.dragF = false; }); });
     network.on('hoverNode', function(p){ hoverNodeId = p.node; });
     network.on('blurNode', function(){ hoverNodeId = null; });
 
@@ -2417,6 +2519,9 @@
           if(t.conclusionEdgeId === eid){
             t.midHidden = !t.midHidden;
             currentNodesDS.update({ id:t.middleNodeId, hidden:t.midHidden });
+            B.pairs.forEach(function(pp){
+              if(pp.driver === 'neg' && pp.negId === t.middleNodeId) currentNodesDS.update({ id:pp.baseId, hidden:t.midHidden });
+            });
             currentEdgesDS.update([
               { id:t.premiseEdgeIds[0], hidden:t.midHidden },
               { id:t.premiseEdgeIds[1], hidden:t.midHidden }
@@ -2429,7 +2534,7 @@
     startGraphAnim();
 
     document.getElementById('dragHint').textContent =
-      '노드를 드래그해서 위치를 옮길 수 있습니다. 부정형은 원래 개념 노드 오른쪽에 붙은 작은 × 노드로 표시되고 함께 움직입니다. 가운데(중간 개념) 노드를 더블클릭하면 결론 화살표를, 결론 화살표를 더블클릭하면 중간 노드를 숨기거나 다시 보이게 할 수 있습니다.';
+      '노드를 드래그해서 위치를 옮길 수 있습니다. 부정형은 개념 원에 빨간 × 원이 살짝 겹쳐 붙은 모양으로 표시되고, 화살표는 × 쪽을 향하며 함께 움직입니다. 가운데(중간 개념) 노드를 더블클릭하면 결론 화살표를, 결론 화살표를 더블클릭하면 중간 노드를 숨기거나 다시 보이게 할 수 있습니다.';
     document.getElementById('legendBox').innerHTML =
       '<span><i class="ls-solid"></i> 모든 (전칭)</span>' +
       '<span><i class="ls-dashed"></i> 어떤 (특칭)</span>' +
