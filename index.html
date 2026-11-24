@@ -158,6 +158,29 @@
 
   @media (max-width:520px){ #network{ height:380px; } }
 
+  /* ---------- background photo (fixed behind graph; zoom/pan don't move it) ---------- */
+  #network.has-bg{
+    background-color:#161d1f;
+    background-image:var(--bg-img);
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+  }
+  #network.has-bg::before{ content:''; position:absolute; inset:0; z-index:0; pointer-events:none; background:rgba(0,0,0,var(--bg-dim, 0.35)); }
+  #network > .vis-network{ position:relative; z-index:1; }
+  #network canvas.diagram-canvas{ position:relative; z-index:1; }
+
+  /* ---------- view tools (screen record / background) ---------- */
+  .view-tools{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; margin:0 0 10px; }
+  .view-tools .btn.small{ padding:8px 11px; }
+  .view-tools .vt-field{ display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--chalk-dim); }
+  .view-tools .vt-field select{ font-size:11.5px; color:var(--chalk); padding:6px 16px 6px 3px; }
+  .view-tools .vt-field input[type="range"]{ width:90px; accent-color:var(--accent); }
+  .btn.recording{ border-color:#ff4d6d; color:#ff8da1; background:rgba(255,77,109,0.1); }
+  .btn.recording .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; background:#ff4d6d; margin-right:6px; animation:recblink 1s infinite; }
+  @keyframes recblink{ 50%{ opacity:.25; } }
+  .vt-status{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--accent); line-height:1.5; flex:1 1 100%; min-height:0; }
+  .vt-status:empty{ display:none; }
+  .vt-status a{ color:var(--blue); }
+
   /* ---------- effects panel ---------- */
   .fx-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
   .fx-head h3{ margin:0 !important; }
@@ -243,6 +266,20 @@
       <div class="result-head">
         <h2 id="viewTitle">논리 그래프</h2>
         <button id="saveImgBtn" class="btn btn-ghost small">이미지로 저장</button>
+      </div>
+      <div class="view-tools">
+        <button id="vrecBtn" class="btn btn-fun small">🔴 화면 녹화</button>
+        <label class="vt-field">화질
+          <select id="vrecQuality">
+            <option value="high">최고 (2배 해상도)</option>
+            <option value="native">화면 그대로</option>
+          </select>
+        </label>
+        <button id="bgBtn" class="btn btn-ghost small">🖼 배경 사진</button>
+        <button id="bgClearBtn" class="btn btn-ghost small hidden">배경 제거</button>
+        <label class="vt-field hidden" id="bgDimField">어둡게 <input type="range" id="bgDim" min="0" max="0.85" step="0.05" value="0.35"></label>
+        <input type="file" id="bgInput" accept="image/*" style="display:none;">
+        <div class="vt-status" id="vrecStatus"></div>
       </div>
       <div id="network"></div>
       <p class="hint" id="dragHint"></p>
@@ -2121,13 +2158,19 @@
     }
     function resize(){
       var r = container.getBoundingClientRect();
-      diag.dpr = window.devicePixelRatio || 1;
+      diag.dpr = diag.dprOverride || window.devicePixelRatio || 1;
       diag.cw = Math.max(10, r.width); diag.ch = Math.max(10, r.height);
       canvas.width = Math.round(diag.cw*diag.dpr);
       canvas.height = Math.round(diag.ch*diag.dpr);
       resetView();
     }
     diag.onResize = function(){ if(diag) resize(); };
+    diag.setDpr = function(p){
+      diag.dprOverride = p || 0;
+      diag.dpr = p || window.devicePixelRatio || 1;
+      canvas.width = Math.round(diag.cw*diag.dpr);
+      canvas.height = Math.round(diag.ch*diag.dpr);
+    };
     window.addEventListener('resize', diag.onResize);
     resize();
 
@@ -2611,12 +2654,25 @@
       c.width = diag.W*scale; c.height = diag.H*scale;
       var ctx = c.getContext('2d');
       ctx.fillStyle = '#161d1f'; ctx.fillRect(0, 0, c.width, c.height);
+      drawBgPhoto(ctx, c.width, c.height);
       ctx.scale(scale, scale);
       drawDiagramWorld(ctx, diag.cells, performance.now()/1000*FX.speed, scale);
       triggerDownload(c.toDataURL('image/png'), '삼단논법_다이어그램.png');
     } else {
       if(!network) return;
-      try{ triggerDownload(network.canvas.frame.canvas.toDataURL('image/png'), '삼단논법_그래프.png'); }
+      try{
+        var src = network.canvas.frame.canvas;
+        if(bgState.img){
+          var c2 = document.createElement('canvas'); c2.width = src.width; c2.height = src.height;
+          var x2 = c2.getContext('2d');
+          x2.fillStyle = '#161d1f'; x2.fillRect(0, 0, c2.width, c2.height);
+          drawBgPhoto(x2, c2.width, c2.height);
+          x2.drawImage(src, 0, 0);
+          triggerDownload(c2.toDataURL('image/png'), '삼단논법_그래프.png');
+        } else {
+          triggerDownload(src.toDataURL('image/png'), '삼단논법_그래프.png');
+        }
+      }
       catch(err){ alert('이미지 저장에 실패했습니다: ' + err.message); }
     }
   });
@@ -2645,6 +2701,206 @@
       if(btn.dataset.close === 'rec') closeRec(); else closeGame();
     });
   });
+
+
+  // =================================================================
+  // BACKGROUND PHOTO (fixed behind the graph) + LIVE SCREEN RECORDING
+  // =================================================================
+  var bgState = { img:null, url:null, dim:.35 };
+  var netEl = document.getElementById('network');
+
+  function applyBg(){
+    if(bgState.img){
+      netEl.classList.add('has-bg');
+      netEl.style.setProperty('--bg-img', 'url("' + bgState.url + '")');
+      netEl.style.setProperty('--bg-dim', bgState.dim);
+    } else {
+      netEl.classList.remove('has-bg');
+      netEl.style.removeProperty('--bg-img');
+      netEl.style.removeProperty('--bg-dim');
+    }
+    document.getElementById('bgClearBtn').classList.toggle('hidden', !bgState.img);
+    document.getElementById('bgDimField').classList.toggle('hidden', !bgState.img);
+  }
+  // cover-fit the photo into (w,h), then the dim overlay — same look as the CSS background
+  function drawBgPhoto(ctx, w, h){
+    if(!bgState.img) return;
+    var img = bgState.img, iw = img.naturalWidth, ih = img.naturalHeight;
+    if(!iw || !ih) return;
+    var k = Math.max(w/iw, h/ih), dw = iw*k, dh = ih*k;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, (w - dw)/2, (h - dh)/2, dw, dh);
+    if(bgState.dim > 0){ ctx.fillStyle = 'rgba(0,0,0,' + bgState.dim + ')'; ctx.fillRect(0, 0, w, h); }
+    ctx.restore();
+  }
+
+  document.getElementById('bgBtn').addEventListener('click', function(){ document.getElementById('bgInput').click(); });
+  document.getElementById('bgInput').addEventListener('change', function(e){
+    var f = e.target.files && e.target.files[0]; e.target.value = '';
+    if(!f) return;
+    if(!/^image\//.test(f.type)){ alert('이미지 파일을 선택해주세요.'); return; }
+    var url = URL.createObjectURL(f), img = new Image();
+    img.onload = function(){
+      if(bgState.url) URL.revokeObjectURL(bgState.url);
+      bgState.img = img; bgState.url = url;
+      applyBg();
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); alert('이미지를 불러오지 못했습니다.'); };
+    img.src = url;
+  });
+  document.getElementById('bgClearBtn').addEventListener('click', function(){
+    if(bgState.url) URL.revokeObjectURL(bgState.url);
+    bgState.img = null; bgState.url = null; applyBg();
+  });
+  document.getElementById('bgDim').addEventListener('input', function(e){
+    bgState.dim = parseFloat(e.target.value) || 0;
+    if(bgState.img) netEl.style.setProperty('--bg-dim', bgState.dim);
+  });
+
+  // ---------- screen recording ----------
+  var vrec = { on:false, recorder:null, chunks:[], raf:0, comp:null, cctx:null, t0:0, timer:0,
+               boosted:null, url:null, ext:'webm', mime:'' };
+  var vrecBtn = document.getElementById('vrecBtn');
+  var vrecStatus = document.getElementById('vrecStatus');
+
+  function vrecSource(){
+    if(isDiagram) return diag ? diag.canvas : null;
+    return (network && network.canvas && network.canvas.frame) ? network.canvas.frame.canvas : null;
+  }
+  function pickMime(){
+    var list = [
+      ['video/mp4;codecs=avc1.640033', 'mp4'], ['video/mp4;codecs=avc1', 'mp4'], ['video/mp4', 'mp4'],
+      ['video/webm;codecs=vp9', 'webm'], ['video/webm;codecs=vp8', 'webm'], ['video/webm', 'webm']
+    ];
+    for(var i=0;i<list.length;i++){
+      if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(list[i][0])) return { mime:list[i][0], ext:list[i][1] };
+    }
+    return null;
+  }
+
+  // Render the live canvas at a higher pixel ratio while recording so the video stays sharp.
+  function boostRender(pr){
+    if(isDiagram){
+      if(!diag || !diag.setDpr) return null;
+      var prev = diag.dprOverride || 0;
+      if(pr > diag.dpr + .01){ diag.setDpr(pr); return function(){ if(diag && diag.setDpr) diag.setDpr(prev); }; }
+      return null;
+    }
+    if(!network || !network.canvas) return null;
+    var cv = network.canvas, c = cv.frame.canvas;
+    var cur = cv.pixelRatio || 1;
+    if(pr <= cur + .01) return null;
+    function undo(){
+      try{
+        delete cv._setPixelRatio;
+        cv.pixelRatio = cur;
+        if(typeof cv.setSize === 'function') cv.setSize();
+        network.redraw();
+      }catch(err){}
+    }
+    try{
+      cv._setPixelRatio = function(){ this.pixelRatio = pr; };
+      cv.pixelRatio = pr;
+      cv.setSize();
+      network.redraw();
+      var want = Math.round(c.clientWidth*pr);
+      if(Math.abs(c.width - want) > 3){ undo(); return null; }
+      return undo;
+    }catch(err){ undo(); return null; }
+  }
+
+  function fmtTime(sec){ var m = Math.floor(sec/60), s = Math.floor(sec%60); return (m<10?'0':'') + m + ':' + (s<10?'0':'') + s; }
+  function even(n){ n = Math.round(n); return n - (n % 2); }
+
+  function vrecStart(){
+    if(!window.MediaRecorder){ alert('이 브라우저는 화면 녹화(MediaRecorder)를 지원하지 않습니다. 최신 Chrome / Edge / Safari를 사용해주세요.'); return; }
+    var src0 = vrecSource();
+    if(!src0){ alert('녹화할 화면이 없습니다.'); return; }
+    var mt = pickMime();
+    if(!mt){ alert('지원되는 영상 형식을 찾지 못했습니다.'); return; }
+
+    var dpr = window.devicePixelRatio || 1;
+    var q = document.getElementById('vrecQuality').value;
+    var pr = q === 'high' ? Math.min(3, Math.max(2, dpr)) : dpr;
+    var rect = netEl.getBoundingClientRect();
+    // keep the longest side within 2560px (hardware encoder friendly)
+    var cap = Math.min(1, 2560 / (Math.max(rect.width, rect.height) * pr));
+    pr = pr * cap;
+
+    vrec.boosted = boostRender(pr);
+    var src = vrecSource() || src0;
+    var W = even(src.width), H = even(src.height);
+    // if the boost didn't apply, never upscale beyond the real canvas size
+    if(W < 16 || H < 16){ alert('화면 크기가 너무 작아 녹화할 수 없습니다.'); if(vrec.boosted){ vrec.boosted(); vrec.boosted = null; } return; }
+
+    vrec.comp = document.createElement('canvas'); vrec.comp.width = W; vrec.comp.height = H;
+    vrec.cctx = vrec.comp.getContext('2d', { alpha:false });
+
+    function paint(){
+      var cs = vrecSource(), x = vrec.cctx;
+      x.setTransform(1,0,0,1,0,0);
+      x.fillStyle = '#161d1f'; x.fillRect(0, 0, W, H);
+      drawBgPhoto(x, W, H);
+      if(cs){ x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high'; x.drawImage(cs, 0, 0, W, H); }
+    }
+    (function loop(){ if(!vrec.on) return; paint(); vrec.raf = requestAnimationFrame(loop); })();
+    paint();
+
+    var FPS = 60;
+    var stream = vrec.comp.captureStream(FPS);
+    var bps = Math.round(clamp(W*H*FPS*0.10, 8e6, 40e6));
+    var opts = { mimeType:mt.mime, videoBitsPerSecond:bps };
+    try{ vrec.recorder = new MediaRecorder(stream, opts); }
+    catch(err){
+      try{ vrec.recorder = new MediaRecorder(stream); }
+      catch(err2){ alert('녹화를 시작하지 못했습니다: ' + err2.message); if(vrec.boosted){ vrec.boosted(); vrec.boosted = null; } return; }
+    }
+    vrec.mime = mt.mime; vrec.ext = mt.ext; vrec.chunks = [];
+    vrec.recorder.ondataavailable = function(ev){ if(ev.data && ev.data.size) vrec.chunks.push(ev.data); };
+    vrec.recorder.onstop = vrecFinish;
+    vrec.on = true;
+    vrec.recorder.start(1000);
+
+    vrec.t0 = performance.now();
+    vrecBtn.classList.add('recording');
+    vrecBtn.innerHTML = '<span class="dot"></span>녹화 중지 · 00:00';
+    document.getElementById('toggleBtn').disabled = true;
+    document.getElementById('backBtn').disabled = true;
+    document.getElementById('vrecQuality').disabled = true;
+    vrecStatus.textContent = '녹화 중 · ' + W + '×' + H + ' · ' + mt.ext.toUpperCase() + ' · ' + (bps/1e6).toFixed(0) + 'Mbps — 확대/축소/이동/노드 드래그하는 모습이 그대로 녹화됩니다.';
+    vrec.timer = setInterval(function(){
+      vrecBtn.innerHTML = '<span class="dot"></span>녹화 중지 · ' + fmtTime((performance.now() - vrec.t0)/1000);
+    }, 500);
+  }
+
+  function vrecStop(){
+    if(!vrec.on) return;
+    vrec.on = false;
+    cancelAnimationFrame(vrec.raf);
+    clearInterval(vrec.timer);
+    try{ vrec.recorder.stop(); }catch(err){ vrecFinish(); }
+  }
+
+  function vrecFinish(){
+    if(vrec.boosted){ vrec.boosted(); vrec.boosted = null; }
+    vrecBtn.classList.remove('recording');
+    vrecBtn.innerHTML = '🔴 화면 녹화';
+    document.getElementById('toggleBtn').disabled = false;
+    document.getElementById('backBtn').disabled = false;
+    document.getElementById('vrecQuality').disabled = false;
+    if(!vrec.chunks.length){ vrecStatus.textContent = '녹화된 데이터가 없습니다.'; return; }
+    var blob = new Blob(vrec.chunks, { type:vrec.mime.split(';')[0] });
+    if(vrec.url) URL.revokeObjectURL(vrec.url);
+    vrec.url = URL.createObjectURL(blob);
+    var name = '삼단논법_화면녹화_' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.' + vrec.ext;
+    triggerDownload(vrec.url, name);
+    vrecStatus.innerHTML = '저장 완료 (' + (blob.size/1048576).toFixed(1) + 'MB). 다운로드가 안 됐다면 <a href="' + vrec.url + '" download="' + name + '">여기를 눌러 다시 저장</a>';
+    vrec.chunks = []; vrec.recorder = null; vrec.comp = null; vrec.cctx = null;
+  }
+
+  vrecBtn.addEventListener('click', function(){ if(vrec.on) vrecStop(); else vrecStart(); });
+  window.addEventListener('beforeunload', function(e){ if(vrec.on){ e.preventDefault(); e.returnValue = ''; } });
 
   // =================================================================
   // RECORDING: TTS reads the 3 propositions, matching shapes light up,
